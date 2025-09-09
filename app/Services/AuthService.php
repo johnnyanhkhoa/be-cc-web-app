@@ -8,7 +8,7 @@ use Exception;
 
 class AuthService
 {
-    private const BASE_URL = 'https://users-ms-test.vnapp.xyz';
+    private const BASE_URL = 'https://users-ms.vnapp.xyz';
     private const LOGIN_ENDPOINT = '/oauth/token';
 
     // Fixed credentials as per requirements

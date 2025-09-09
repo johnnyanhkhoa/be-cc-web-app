@@ -4,6 +4,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\DutyRosterController;
+use App\Http\Controllers\API\TblCcReasonController;
+use App\Http\Controllers\API\TblCcRemarkController;
 
 /*
 |--------------------------------------------------------------------------
@@ -54,6 +56,47 @@ Route::prefix('calls')->group(function () {
 Route::prefix('call-assignments')->group(function () {
     // Assign calls to available agents
     Route::post('/assign', [App\Http\Controllers\API\CallAssignmentController::class, 'assignCalls']);
+});
+
+Route::prefix('cc-reasons')->group(function () {
+    // Get all active reasons (no pagination, no filters)
+    Route::get('/', [TblCcReasonController::class, 'index']);
+
+    // Get specific reason by ID
+    Route::get('/{id}', [TblCcReasonController::class, 'show']);
+
+    // Get reasons grouped by type
+    Route::get('/group/by-type', [TblCcReasonController::class, 'getByType']);
+
+    // Get all reasons (including inactive)
+    Route::get('/all/records', [TblCcReasonController::class, 'all']);
+
+    // Get simple statistics
+    Route::get('/stats/summary', [TblCcReasonController::class, 'stats']);
+});
+
+// TblCcRemark API Routes (Read Only - Simple)
+Route::prefix('cc-remarks')->group(function () {
+    // Get all active remarks
+    Route::get('/', [TblCcRemarkController::class, 'index']);
+
+    // Get specific remark by ID
+    Route::get('/{id}', [TblCcRemarkController::class, 'show']);
+
+    // Get remarks grouped by contact type
+    Route::get('/group/by-contact-type', [TblCcRemarkController::class, 'getByContactType']);
+
+    // Get remarks for specific contact type (all/rpc/tpc)
+    Route::get('/contact-type/{contactType}', [TblCcRemarkController::class, 'getByType']);
+
+    // Get all contact types with statistics
+    Route::get('/meta/contact-types', [TblCcRemarkController::class, 'getContactTypes']);
+
+    // Get all remarks (including inactive)
+    Route::get('/all/records', [TblCcRemarkController::class, 'all']);
+
+    // Get simple statistics
+    Route::get('/stats/summary', [TblCcRemarkController::class, 'stats']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)

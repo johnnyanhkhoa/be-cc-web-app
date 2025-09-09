@@ -39,8 +39,6 @@ class WriteLogLogin implements ShouldQueue
             // Format data for Zay Yar's service
             $payload = $this->formatPayload($this->data);
 
-            Log::info('Complete formatted payload', ['payload' => $payload]);
-
             // Send to RabbitMQ
             $this->publishToRabbitMQ($payload);
 
@@ -111,18 +109,11 @@ class WriteLogLogin implements ShouldQueue
 
         $channel = $connection->channel();
 
-        // Declare exchange
-        $exchangeName = config('queue.connections.rabbitmq.options.exchange.name');
-        $channel->exchange_declare(
-            $exchangeName,
-            'direct',
-            false,  // passive
-            true,   // durable
-            false   // auto_delete
-        );
+        // Use existing amq.direct exchange
+        $exchangeName = 'amq.direct';
 
-        // Declare queue
-        $queueName = config('queue.connections.rabbitmq.queue');
+        // Declare queue (use login_history_queue)
+        $queueName = 'login_history_queue';
         $channel->queue_declare(
             $queueName,
             false,  // passive
@@ -132,7 +123,7 @@ class WriteLogLogin implements ShouldQueue
         );
 
         // Bind queue to exchange
-        $channel->queue_bind($queueName, $exchangeName, 'user.login');
+        $channel->queue_bind($queueName, $exchangeName, 'login_history');
 
         // Create message
         $messageBody = json_encode($payload);
@@ -142,12 +133,12 @@ class WriteLogLogin implements ShouldQueue
         ]);
 
         // Publish message
-        $channel->basic_publish($message, $exchangeName, 'user.login');
+        $channel->basic_publish($message, $exchangeName, 'login_history');
 
         Log::info('Message published to RabbitMQ', [
             'exchange' => $exchangeName,
             'queue' => $queueName,
-            'routing_key' => 'user.login',
+            'routing_key' => 'login_history',
             'payload_size' => strlen($messageBody)
         ]);
 
