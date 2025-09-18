@@ -17,12 +17,16 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'auth_user_id',
+        'authUserId',
         'email',
         'username',
-        'user_full_name',
-        'is_active',
-        'last_login_at',
+        'userFullName',
+        'isActive',
+        'lastLoginAt',
+        'personCreated',
+        'personUpdated',
+        'personDeleted',
+        'reasonDeleted',
     ];
 
     /**
@@ -40,19 +44,40 @@ class User extends Authenticatable
      * @return array<string, string>
      */
     protected $casts = [
-        'is_active' => 'boolean',
-        'last_login_at' => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
+        'isActive' => 'boolean',
+        'lastLoginAt' => 'datetime',
+        'dtCreated' => 'datetime',
+        'dtUpdated' => 'datetime',
+        'dtDeleted' => 'datetime',
     ];
+
+    /**
+     * The name of the "created at" column.
+     *
+     * @var string|null
+     */
+    const CREATED_AT = 'dtCreated';
+
+    /**
+     * The name of the "updated at" column.
+     *
+     * @var string|null
+     */
+    const UPDATED_AT = 'dtUpdated';
+
+    /**
+     * The name of the "deleted at" column for soft deletes.
+     *
+     * @var string
+     */
+    const DELETED_AT = 'dtDeleted';
 
     /**
      * Scope for active users only
      */
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('isActive', true);
     }
 
     /**
@@ -60,7 +85,7 @@ class User extends Authenticatable
      */
     public function isActive(): bool
     {
-        return $this->is_active;
+        return $this->isActive;
     }
 
     /**
@@ -68,7 +93,7 @@ class User extends Authenticatable
      */
     public function updateLastLogin(): void
     {
-        $this->update(['last_login_at' => now()]);
+        $this->update(['lastLoginAt' => now()]);
     }
 
     // Future relationships

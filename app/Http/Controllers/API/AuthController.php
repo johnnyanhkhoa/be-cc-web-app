@@ -10,14 +10,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
-use App\Jobs\WriteLogLogin;
-use App\Services\GetDeviceInfoService;
 
 class AuthController extends Controller
 {
     public function __construct(
-        private AuthService $authService,
-        private GetDeviceInfoService $getDeviceInfo
+        private AuthService $authService
     ) {}
 
     /**
@@ -56,45 +53,21 @@ class AuthController extends Controller
 
             // Step 3: Create or update local user
             $localUser = User::updateOrCreate(
-                ['auth_user_id' => $authUserId],
+                ['authUserId' => $authUserId],
                 [
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'user_full_name' => $user['user_full_name'],
-                    'is_active' => true,
+                    'userFullName' => $user['user_full_name'], // Fixed mapping
+                    'isActive' => true, // Fixed field name
                 ]
             );
 
             // Step 4: Update last login timestamp
             $localUser->updateLastLogin();
 
-            // Step 4.5: Track user login asynchronously
-            try {
-                $deviceData = $this->getDeviceInfo->getDeviceData(
-                    $request,
-                    4, // teamId fixed value
-                    $user['email'],
-                    $user['username']
-                );
-
-                $deviceData['user_id'] = $localUser->id;
-                WriteLogLogin::dispatch($deviceData);
-
-                Log::info('User tracking dispatched', [
-                    'local_user_id' => $localUser->id,
-                    'device_data_keys' => array_keys($deviceData)
-                ]);
-            } catch (Exception $trackingException) {
-                // Don't fail login if tracking fails
-                Log::warning('User tracking failed but login continues', [
-                    'local_user_id' => $localUser->id,
-                    'tracking_error' => $trackingException->getMessage()
-                ]);
-            }
-
             Log::info('Login successful', [
                 'local_user_id' => $localUser->id,
-                'auth_user_id' => $authUserId
+                'authUserId' => $authUserId
             ]);
 
             // Step 5: Return success response
@@ -104,12 +77,12 @@ class AuthController extends Controller
                 'data' => [
                     'user' => [
                         'id' => $localUser->id,
-                        'auth_user_id' => $localUser->auth_user_id,
+                        'authUserId' => $localUser->authUserId,
                         'email' => $localUser->email,
                         'username' => $localUser->username,
-                        'user_full_name' => $localUser->user_full_name,
-                        'is_active' => $localUser->is_active,
-                        'last_login_at' => $localUser->last_login_at,
+                        'userFullName' => $localUser->userFullName,
+                        'isActive' => $localUser->isActive,
+                        'lastLoginAt' => $localUser->lastLoginAt,
                     ],
                     'external_user' => [
                         'user_id' => $user['user_id'],
@@ -240,7 +213,7 @@ class AuthController extends Controller
             $user = $userData['user'];
 
             // Try to find local user
-            $localUser = User::where('auth_user_id', $user['user_id'])->first();
+            $localUser = User::where('authUserId', $user['user_id'])->first();
 
             return response()->json([
                 'success' => true,
@@ -248,12 +221,12 @@ class AuthController extends Controller
                 'data' => [
                     'local_user' => $localUser ? [
                         'id' => $localUser->id,
-                        'auth_user_id' => $localUser->auth_user_id,
+                        'authUserId' => $localUser->authUserId,
                         'email' => $localUser->email,
                         'username' => $localUser->username,
-                        'user_full_name' => $localUser->user_full_name,
-                        'is_active' => $localUser->is_active,
-                        'last_login_at' => $localUser->last_login_at,
+                        'userFullName' => $localUser->userFullName,
+                        'isActive' => $localUser->isActive,
+                        'lastLoginAt' => $localUser->lastLoginAt,
                     ] : null,
                     'external_user' => [
                         'user_id' => $user['user_id'],

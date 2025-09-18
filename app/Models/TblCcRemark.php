@@ -15,7 +15,7 @@ class TblCcRemark extends Model
      *
      * @var string
      */
-    protected $table = 'tbl_cc_remark';
+    protected $table = 'tbl_CcRemark';
 
     /**
      * The primary key associated with the table.

@@ -4,8 +4,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\DutyRosterController;
+use App\Http\Controllers\API\TblCcPhoneCollectionController;
+use App\Http\Controllers\API\TblCcPhoneCollectionDetailController;
 use App\Http\Controllers\API\TblCcReasonController;
 use App\Http\Controllers\API\TblCcRemarkController;
+use App\Http\Controllers\API\TblCcScriptController;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,6 +61,12 @@ Route::prefix('call-assignments')->group(function () {
     Route::post('/assign', [App\Http\Controllers\API\CallAssignmentController::class, 'assignCalls']);
 });
 
+// TblCcPhoneCollection API Routes (Read Only)
+Route::prefix('cc-phone-collections')->group(function () {
+    // Get phone collection records with filtering by status and assignedTo
+    Route::get('/', [TblCcPhoneCollectionController::class, 'index']);
+});
+
 Route::prefix('cc-reasons')->group(function () {
     // Get all active reasons (no pagination, no filters)
     Route::get('/', [TblCcReasonController::class, 'index']);
@@ -97,6 +106,50 @@ Route::prefix('cc-remarks')->group(function () {
 
     // Get simple statistics
     Route::get('/stats/summary', [TblCcRemarkController::class, 'stats']);
+});
+
+// TblCcScript API Routes (Read Only - Simple)
+Route::prefix('cc-scripts')->group(function () {
+    // Get all active scripts
+    Route::get('/', [TblCcScriptController::class, 'index']);
+
+    // Get specific script by ID
+    Route::get('/{id}', [TblCcScriptController::class, 'show']);
+
+    // Get scripts by source (normal/dslp)
+    Route::get('/source/{source}', [TblCcScriptController::class, 'getBySource']);
+
+    // Get scripts by segment (pre-due/past-due)
+    Route::get('/segment/{segment}', [TblCcScriptController::class, 'getBySegment']);
+
+    // Get scripts by receiver (rpc/tpc)
+    Route::get('/receiver/{receiver}', [TblCcScriptController::class, 'getByReceiver']);
+
+    // Get scripts grouped by combinations
+    Route::get('/group/all', [TblCcScriptController::class, 'getGrouped']);
+
+    // Get metadata (available options)
+    Route::get('/meta/options', [TblCcScriptController::class, 'getMetadata']);
+
+    // Get all scripts (including inactive)
+    Route::get('/all/records', [TblCcScriptController::class, 'all']);
+
+    // Get simple statistics
+    Route::get('/stats/summary', [TblCcScriptController::class, 'stats']);
+});
+
+// TblCcPhoneCollectionDetail API Routes
+Route::prefix('cc-phone-collection-details')->group(function () {
+    // Create new phone collection detail
+    Route::post('/', [TblCcPhoneCollectionDetailController::class, 'store']);
+
+    // Get supporting data for forms
+    Route::get('/case-results', [TblCcPhoneCollectionDetailController::class, 'getCaseResults']);
+    Route::get('/standard-remarks', [TblCcPhoneCollectionDetailController::class, 'getStandardRemarks']);
+    Route::get('/metadata', [TblCcPhoneCollectionDetailController::class, 'getMetadata']);
+
+    // Get recent records for reference
+    Route::get('/recent', [TblCcPhoneCollectionDetailController::class, 'getRecent']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)

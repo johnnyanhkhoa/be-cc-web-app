@@ -15,7 +15,7 @@ class TblCcReason extends Model
      *
      * @var string
      */
-    protected $table = 'tbl_cc_reason';
+    protected $table = 'tbl_CcReason';
 
     /**
      * The primary key associated with the table.
