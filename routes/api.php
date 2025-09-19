@@ -61,10 +61,13 @@ Route::prefix('call-assignments')->group(function () {
     Route::post('/assign', [App\Http\Controllers\API\CallAssignmentController::class, 'assignCalls']);
 });
 
-// TblCcPhoneCollection API Routes (Read Only)
+// TblCcPhoneCollection API Routes
 Route::prefix('cc-phone-collections')->group(function () {
     // Get phone collection records with filtering by status and assignedTo
     Route::get('/', [TblCcPhoneCollectionController::class, 'index']);
+
+    // Create new phone collection record
+    Route::post('/', [TblCcPhoneCollectionController::class, 'store']);
 });
 
 Route::prefix('cc-reasons')->group(function () {
