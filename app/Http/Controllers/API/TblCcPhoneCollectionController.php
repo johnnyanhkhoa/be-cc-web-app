@@ -4,7 +4,9 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateCcPhoneCollectionRequest;
+use App\Http\Requests\BulkCreateCcPhoneCollectionRequest;
 use App\Models\TblCcPhoneCollection;
+use App\Services\BulkPhoneCollectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +14,89 @@ use Exception;
 
 class TblCcPhoneCollectionController extends Controller
 {
+    protected $bulkService;
+
+    public function __construct(BulkPhoneCollectionService $bulkService)
+    {
+        $this->bulkService = $bulkService;
+    }
+
+    /**
+     * Bulk create phone collection records
+     *
+     * @param BulkCreateCcPhoneCollectionRequest $request
+     * @return JsonResponse
+     */
+    public function bulkStore(BulkCreateCcPhoneCollectionRequest $request): JsonResponse
+    {
+        try {
+            $phoneCollections = $request->validated()['phone_collections'];
+
+            Log::info('Starting bulk create phone collections', [
+                'record_count' => count($phoneCollections),
+                'request_size' => strlen(json_encode($phoneCollections)) / 1024 . ' KB'
+            ]);
+
+            // Validate data integrity (check duplicates, etc.)
+            // $integrityErrors = $this->bulkService->validateDataIntegrity($phoneCollections);
+            // if (!empty($integrityErrors)) {
+            //     return response()->json([
+            //         'success' => false,
+            //         'message' => 'Data integrity validation failed',
+            //         'errors' => $integrityErrors
+            //     ], 422);
+            // }
+
+            // Decide between chunked or single bulk insert based on size
+            if (count($phoneCollections) > 500) {
+                // Use chunked approach for large datasets
+                $result = $this->bulkService->bulkInsertInChunks($phoneCollections, 500);
+            } else {
+                // Use single bulk insert for smaller datasets
+                $result = $this->bulkService->bulkInsert($phoneCollections);
+            }
+
+            // return response()->json([
+            //     'success' => true,
+            //     'message' => 'Phone collection records created successfully',
+            //     'data' => [
+            //         'total_records' => $result['total_records'] ?? $result['records_inserted'],
+            //         'records_inserted' => $result['total_inserted'] ?? $result['records_inserted'],
+            //         'execution_time' => $result['execution_time'] ?? 'N/A',
+            //         'first_id' => $result['first_id'] ?? null,
+            //         'last_id' => $result['last_id'] ?? null,
+            //         'performance_stats' => [
+            //             'records_per_second' => isset($result['execution_time']) && $result['execution_time'] > 0
+            //                 ? round(($result['total_inserted'] ?? $result['records_inserted']) / $result['execution_time'], 2)
+            //                 : 'N/A',
+            //             'memory_usage' => memory_get_usage(true) / 1024 / 1024 . ' MB',
+            //             'chunks_processed' => $result['chunks_processed'] ?? 1
+            //         ]
+            //     ]
+            // ], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Phone collection records created successfully',
+                'data' => [
+                    'total_records' => count($phoneCollections),
+                    'records_inserted' => $result['records_inserted']
+                ]
+            ], 201);
+
+        } catch (Exception $e) {
+            Log::error('Bulk create phone collections failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_size' => strlen(json_encode($request->validated())) / 1024 . ' KB'
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create phone collection records',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
     /**
      * Create a new phone collection record
      *

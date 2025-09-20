@@ -66,8 +66,11 @@ Route::prefix('cc-phone-collections')->group(function () {
     // Get phone collection records with filtering by status and assignedTo
     Route::get('/', [TblCcPhoneCollectionController::class, 'index']);
 
-    // Create new phone collection record
+    // Create single phone collection record
     Route::post('/', [TblCcPhoneCollectionController::class, 'store']);
+
+    // Bulk create multiple phone collection records
+    Route::post('/collection', [TblCcPhoneCollectionController::class, 'bulkStore']);
 });
 
 Route::prefix('cc-reasons')->group(function () {
