@@ -28,7 +28,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             Log::info('Creating phone collection detail', [
                 'contact_type' => $validatedData['contactType'] ?? null,
                 'call_status' => $validatedData['callStatus'] ?? null,
-                'person_created' => $validatedData['personCreated']
+                'createdBy' => $validatedData['createdBy']
             ]);
 
             // Create the record
@@ -69,8 +69,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkContent' => $phoneCollectionDetail->standardRemarkContent,
                     'reschedulingEvidence' => $phoneCollectionDetail->reschedulingEvidence,
                     'uploadDocuments' => $phoneCollectionDetail->uploadDocuments,
-                    'dtCreated' => $phoneCollectionDetail->dtCreated?->format('Y-m-d H:i:s'),
-                    'personCreated' => $phoneCollectionDetail->personCreated,
+                    'createdAt' => $phoneCollectionDetail->createdAt?->format('Y-m-d H:i:s'),
+                    'createdBy' => $phoneCollectionDetail->createdBy,
                     // Include related data if available
                     'standardRemark' => $phoneCollectionDetail->standardRemark,
                     'creator' => $phoneCollectionDetail->creator ? [
@@ -182,7 +182,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'dtCallLater' => 'Must be today or future date',
                         'dtCallEnded' => 'Must be after dtCallStarted',
                         'uploadDocuments' => 'Must be valid JSON format',
-                        'personCreated' => 'Required for audit tracking'
+                        'createdBy' => 'Required for audit tracking'
                     ]
                 ]
             ], 200);
@@ -209,7 +209,7 @@ class TblCcPhoneCollectionDetailController extends Controller
     {
         try {
             $recentDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator'])
-                                                     ->orderBy('dtCreated', 'desc')
+                                                     ->orderBy('createdAt', 'desc')
                                                      ->take(10)
                                                      ->get();
 

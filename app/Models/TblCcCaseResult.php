@@ -38,9 +38,9 @@ class TblCcCaseResult extends Model
         'escalation',
         'specialCase',
         'dslp',
-        'personCreated',
-        'personUpdated',
-        'personDeleted',
+        'createdBy',
+        'updatedBy',
+        'deletedBy',
     ];
 
     /**
@@ -54,9 +54,9 @@ class TblCcCaseResult extends Model
         'escalation' => 'boolean',
         'specialCase' => 'boolean',
         'dslp' => 'boolean',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
     ];
 
     /**
@@ -64,28 +64,28 @@ class TblCcCaseResult extends Model
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Scope for active case results (not deleted)
      */
     public function scopeActive($query)
     {
-        return $query->whereNull('dtDeleted');
+        return $query->whereNull('deletedAt');
     }
 
     /**

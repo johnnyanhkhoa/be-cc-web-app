@@ -117,7 +117,7 @@ class TblCcPhoneCollectionController extends Controller
             // Set default values for auto fields
             $validatedData['status'] = $validatedData['status'] ?? 'pending';
             $validatedData['totalAttempts'] = 0;
-            $validatedData['personCreated'] = $validatedData['personCreated'] ?? 1; // TODO: Get from auth
+            $validatedData['createdBy'] = $validatedData['createdBy'] ?? 1; // TODO: Get from auth
 
             // Create the record
             $phoneCollection = TblCcPhoneCollection::create($validatedData);
@@ -158,8 +158,8 @@ class TblCcPhoneCollectionController extends Controller
                     'gender' => $phoneCollection->gender,
                     'birthDate' => $phoneCollection->birthDate?->format('Y-m-d'),
                     'totalAttempts' => $phoneCollection->totalAttempts,
-                    'dtCreated' => $phoneCollection->dtCreated?->format('Y-m-d H:i:s'),
-                    'personCreated' => $phoneCollection->personCreated,
+                    'createdAt' => $phoneCollection->createdAt?->format('Y-m-d H:i:s'),
+                    'createdBy' => $phoneCollection->createdBy,
                 ]
             ], 201);
 
@@ -199,18 +199,18 @@ class TblCcPhoneCollectionController extends Controller
             }
 
             // Sorting
-            $sortBy = $request->get('sort_by', 'dtCreated');
+            $sortBy = $request->get('sort_by', 'createdAt');
             $sortOrder = $request->get('sort_order', 'desc');
 
             // Validate sort parameters
             $allowedSortFields = [
                 'phoneCollectionId', 'status', 'assignedTo', 'assignedAt',
-                'totalAttempts', 'lastAttemptAt', 'dtCreated', 'dtUpdated',
+                'totalAttempts', 'lastAttemptAt', 'createdAt', 'updatedAt',
                 'dueDate', 'totalAmount', 'amountUnpaid'
             ];
 
             if (!in_array($sortBy, $allowedSortFields)) {
-                $sortBy = 'dtCreated';
+                $sortBy = 'createdAt';
             }
             if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) {
                 $sortOrder = 'desc';

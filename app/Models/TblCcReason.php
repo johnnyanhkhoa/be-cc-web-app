@@ -34,9 +34,9 @@ class TblCcReason extends Model
         'reasonName',
         'reasonActive',
         'reasonRemark',
-        'personCreated',
-        'personUpdated',
-        'personDeleted',
+        'createdBy',
+        'updatedBy',
+        'deletedBy',
     ];
 
     /**
@@ -53,9 +53,9 @@ class TblCcReason extends Model
      */
     protected $casts = [
         'reasonActive' => 'boolean',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
     ];
 
     /**
@@ -63,21 +63,21 @@ class TblCcReason extends Model
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Scope for active reasons only

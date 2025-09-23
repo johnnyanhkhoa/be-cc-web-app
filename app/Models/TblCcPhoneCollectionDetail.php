@@ -51,10 +51,10 @@ class TblCcPhoneCollectionDetail extends Model
         'standardRemarkContent',
         'reschedulingEvidence',
         'uploadDocuments',
-        'personCreated',
-        'personUpdated',
-        'personDeleted',
-        'reasonDeleted',
+        'createdBy',
+        'updatedBy',
+        'deletedBy',
+        'deletedReason',
     ];
 
     /**
@@ -78,9 +78,9 @@ class TblCcPhoneCollectionDetail extends Model
         'dtCallLater' => 'date',
         'dtCallStarted' => 'datetime',
         'dtCallEnded' => 'datetime',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
     ];
 
     /**
@@ -88,21 +88,21 @@ class TblCcPhoneCollectionDetail extends Model
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Contact type constants
@@ -171,7 +171,7 @@ class TblCcPhoneCollectionDetail extends Model
      */
     public function creator()
     {
-        return $this->belongsTo(User::class, 'personCreated', 'id');
+        return $this->belongsTo(User::class, 'createdBy', 'id');
     }
 
     /**
@@ -183,9 +183,9 @@ class TblCcPhoneCollectionDetail extends Model
 
         // Set personCreated when creating
         static::creating(function ($model) {
-            // Auto set dtCreated
-            if (!$model->dtCreated) {
-                $model->dtCreated = now();
+            // Auto set createdAt
+            if (!$model->createdAt) {
+                $model->createdAt = now();
             }
 
             // TODO: Set from authenticated user when auth is implemented

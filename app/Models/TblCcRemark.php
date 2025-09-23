@@ -33,9 +33,9 @@ class TblCcRemark extends Model
         'remarkContent',
         'contactType',
         'remarkActive',
-        'personCreated',
-        'personUpdated',
-        'personDeleted',
+        'createdBy',
+        'updatedBy',
+        'deletedBy',
     ];
 
     /**
@@ -52,9 +52,9 @@ class TblCcRemark extends Model
      */
     protected $casts = [
         'remarkActive' => 'boolean',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
     ];
 
     /**
@@ -62,21 +62,21 @@ class TblCcRemark extends Model
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Contact type constants

@@ -35,8 +35,8 @@ class BulkPhoneCollectionService
                     // Status and defaults
                     'status' => 'pending',
                     'totalAttempts' => 0,
-                    'personCreated' => 1, // TODO: Get from auth when available
-                    'personUpdated' => 1,
+                    'createdBy' => 1, // TODO: Get from auth when available
+                    'updatedBy' => 1,
 
                     // Required fields from request
                     'segmentType' => $item['segmentType'],
@@ -64,8 +64,8 @@ class BulkPhoneCollectionService
                     'birthDate' => $item['birthDate'],
 
                     // Timestamps
-                    'dtCreated' => now(),
-                    'dtUpdated' => now(),
+                    'createdAt' => now(),
+                    'updatedAt' => now(),
                 ];
             })->toArray();
 

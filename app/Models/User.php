@@ -23,9 +23,9 @@ class User extends Authenticatable
         'userFullName',
         'isActive',
         'lastLoginAt',
-        'personCreated',
-        'personUpdated',
-        'personDeleted',
+        'createdBy',
+        'updatedBy',
+        'deletedBy',
         'reasonDeleted',
     ];
 
@@ -46,9 +46,9 @@ class User extends Authenticatable
     protected $casts = [
         'isActive' => 'boolean',
         'lastLoginAt' => 'datetime',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
     ];
 
     /**
@@ -56,21 +56,21 @@ class User extends Authenticatable
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Scope for active users only
