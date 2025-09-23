@@ -60,6 +60,15 @@ Route::prefix('calls')->group(function () {
     Route::get('/user/{userId}', [App\Http\Controllers\API\CallController::class, 'getAssignedCallsForUser']);
 });
 
+// Contract Information Routes
+Route::prefix('contracts')->group(function () {
+    // Get contract details by contractId
+    Route::get('/{contractId}', [App\Http\Controllers\API\ContractController::class, 'getContractDetails']);
+
+    // Get contract summary (minimal info)
+    Route::get('/{contractId}/summary', [App\Http\Controllers\API\ContractController::class, 'getContractSummary']);
+});
+
 // Call Assignment Routes
 Route::prefix('call-assignments')->group(function () {
     // Assign calls to available agents
