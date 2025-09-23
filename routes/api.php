@@ -46,6 +46,11 @@ Route::prefix('duty-rosters')->group(function () {
     Route::get('/agents/{date}', [DutyRosterController::class, 'getAgentsForDate']);
 });
 
+// Phone Collection Sync Routes
+Route::prefix('sync')->group(function () {
+    Route::post('phone-collections', [App\Http\Controllers\API\PhoneCollectionSyncController::class, 'syncPhoneCollections']);
+});
+
 // Calls Management Routes
 Route::prefix('calls')->group(function () {
     // Get all calls

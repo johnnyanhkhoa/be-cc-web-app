@@ -37,8 +37,8 @@ class TblCcPhoneCollection extends Model
         'totalAttempts',
         'lastAttemptAt',
         'lastAttemptBy',
-        'personCreated',
-        'personUpdated',
+        'createdBy',
+        'updatedBy',
         'segmentType',
         'contractId',
         'customerId',
@@ -64,8 +64,10 @@ class TblCcPhoneCollection extends Model
         'gender',
         'birthDate',
         'callPackageId',
-        'personDeleted',
-        'reasonDeleted',
+        'deletedBy',
+        'deletedReason',
+        'batchId',
+        'riskType',
     ];
 
     /**
@@ -76,9 +78,9 @@ class TblCcPhoneCollection extends Model
     protected $casts = [
         'assignedAt' => 'datetime',
         'lastAttemptAt' => 'datetime',
-        'dtCreated' => 'datetime',
-        'dtUpdated' => 'datetime',
-        'dtDeleted' => 'datetime',
+        'createdAt' => 'datetime',
+        'updatedAt' => 'datetime',
+        'deletedAt' => 'datetime',
         'dueDate' => 'date',
         'lastPaymentDate' => 'date',
         'contractDate' => 'date',
@@ -100,21 +102,21 @@ class TblCcPhoneCollection extends Model
      *
      * @var string|null
      */
-    const CREATED_AT = 'dtCreated';
+    const CREATED_AT = 'createdAt';
 
     /**
      * The name of the "updated at" column.
      *
      * @var string|null
      */
-    const UPDATED_AT = 'dtUpdated';
+    const UPDATED_AT = 'updatedAt';
 
     /**
      * The name of the "deleted at" column for soft deletes.
      *
      * @var string
      */
-    const DELETED_AT = 'dtDeleted';
+    const DELETED_AT = 'deletedAt';
 
     /**
      * Scope for filtering by status
