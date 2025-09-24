@@ -3,38 +3,151 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\GetScriptsRequest;
+use App\Models\TblCcBatch;
 use App\Models\TblCcScript;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
 class TblCcScriptController extends Controller
 {
     /**
-     * Display a listing of all active scripts
+     * Get scripts based on batchId and daysPastDue
      *
+     * @param GetScriptsRequest $request
      * @return JsonResponse
      */
-    public function index(): JsonResponse
+    public function getScripts(GetScriptsRequest $request): JsonResponse
     {
         try {
-            // Get all active scripts, sorted by source, segment, then receiver
-            $scripts = TblCcScript::where('scriptActive', true)
-                                 ->orderBy('source')
-                                 ->orderBy('segment')
-                                 ->orderBy('receiver')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get();
+            $validated = $request->validated();
+            $batchId = $validated['batchId'];
+            $daysPastDue = $validated['daysPastDue'];
+
+            Log::info('Getting scripts for batch and days past due', [
+                'batch_id' => $batchId,
+                'days_past_due' => $daysPastDue
+            ]);
+
+            // Step 1: Get batch with scriptCollectionId
+            $batch = TblCcBatch::find($batchId);
+
+            if (!$batch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found',
+                    'error' => 'The specified batch does not exist'
+                ], 404);
+            }
+
+            // Check if batch is active
+            if (!$batch->batchActive) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch is not active',
+                    'error' => 'The specified batch is deactivated'
+                ], 400);
+            }
+
+            // Step 2: Parse scriptCollectionId JSON
+            $scriptCollectionId = $batch->scriptCollectionId;
+
+            if (!$scriptCollectionId || !isset($scriptCollectionId['scriptId']) || !is_array($scriptCollectionId['scriptId'])) {
+                Log::warning('Invalid or empty scriptCollectionId', [
+                    'batch_id' => $batchId,
+                    'script_collection_id' => $scriptCollectionId
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No script collection found for this batch',
+                    'error' => 'Batch does not have valid script collection data'
+                ], 400);
+            }
+
+            $scriptIds = $scriptCollectionId['scriptId'];
+
+            Log::info('Found script IDs in batch', [
+                'batch_id' => $batchId,
+                'script_ids' => $scriptIds,
+                'script_count' => count($scriptIds)
+            ]);
+
+            // Step 3: Get scripts that match the criteria
+            $matchingScripts = TblCcScript::whereIn('scriptId', $scriptIds)
+                ->where('scriptActive', true)
+                ->where(function ($query) use ($daysPastDue) {
+                    $query->where(function ($q) use ($daysPastDue) {
+                        // Check if daysPastDue falls within the range
+                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                          ->where('daysPastDueTo', '>=', $daysPastDue);
+                    })
+                    ->orWhere(function ($q) use ($daysPastDue) {
+                        // Handle cases where daysPastDueTo might be null (open-ended range)
+                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                          ->whereNull('daysPastDueTo');
+                    });
+                })
+                ->orderBy('daysPastDueFrom', 'asc')
+                ->orderBy('scriptId', 'asc')
+                ->get();
+
+            Log::info('Found matching scripts', [
+                'batch_id' => $batchId,
+                'days_past_due' => $daysPastDue,
+                'matching_scripts_count' => $matchingScripts->count(),
+                'matching_script_ids' => $matchingScripts->pluck('scriptId')->toArray()
+            ]);
+
+            // Step 4: Transform data for response
+            $transformedScripts = $matchingScripts->map(function ($script) {
+                return [
+                    'scriptId' => $script->scriptId,
+                    'receiver' => $script->receiver,
+                    'daysPastDueFrom' => $script->daysPastDueFrom,
+                    'daysPastDueTo' => $script->daysPastDueTo,
+                    'scriptContentBur' => $script->scriptContentBur,
+                    'scriptContentEng' => $script->scriptContentEng,
+                    'scriptRemark' => $script->scriptRemark,
+                    'scriptActive' => $script->scriptActive,
+                    'createdAt' => $script->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $script->updatedAt?->format('Y-m-d H:i:s'),
+                ];
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Scripts retrieved successfully',
-                'data' => $scripts,
-                'total' => $scripts->count()
+                'data' => [
+                    'batch' => [
+                        'batchId' => $batch->batchId,
+                        'type' => $batch->type,
+                        'code' => $batch->code,
+                        'segmentType' => $batch->segmentType,
+                        'batchActive' => $batch->batchActive,
+                        'scriptCollectionId' => $batch->scriptCollectionId,
+                    ],
+                    'criteria' => [
+                        'batchId' => $batchId,
+                        'daysPastDue' => $daysPastDue,
+                        'availableScriptIds' => $scriptIds,
+                    ],
+                    'scripts' => $transformedScripts,
+                    'summary' => [
+                        'totalScriptsInBatch' => count($scriptIds),
+                        'matchingScripts' => $matchingScripts->count(),
+                        'matchingScriptIds' => $matchingScripts->pluck('scriptId')->toArray(),
+                        'receivers' => $matchingScripts->pluck('receiver')->unique()->values(),
+                    ]
+                ]
             ], 200);
 
         } catch (Exception $e) {
-            Log::error('Failed to retrieve scripts', [
+            Log::error('Failed to get scripts', [
+                'batch_id' => $batchId ?? null,  // FIX: Use từ validated data
+                'days_past_due' => $daysPastDue ?? null,  // FIX: Use từ validated data
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -48,350 +161,112 @@ class TblCcScriptController extends Controller
     }
 
     /**
-     * Display the specified script by ID
+     * Get all active batches with script collections
      *
-     * @param string $id
      * @return JsonResponse
      */
-    public function show(string $id): JsonResponse
+    public function getBatchesWithScripts(): JsonResponse
     {
         try {
-            $script = TblCcScript::findOrFail($id);
+            $batches = TblCcBatch::where('batchActive', true)
+                ->whereNotNull('scriptCollectionId')
+                ->orderBy('segmentType')
+                ->orderBy('code')
+                ->get();
+
+            $transformedBatches = $batches->map(function ($batch) {
+                $scriptIds = [];
+                if ($batch->scriptCollectionId && isset($batch->scriptCollectionId['scriptId'])) {
+                    $scriptIds = $batch->scriptCollectionId['scriptId'];
+                }
+
+                return [
+                    'batchId' => $batch->batchId,
+                    'type' => $batch->type,
+                    'code' => $batch->code,
+                    'segmentType' => $batch->segmentType,
+                    'batchActive' => $batch->batchActive,
+                    'scriptIds' => $scriptIds,
+                    'scriptCount' => count($scriptIds),
+                    'createdAt' => $batch->createdAt?->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Active batches with scripts retrieved successfully',
+                'data' => $transformedBatches,
+                'total' => $batches->count()
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to get batches with scripts', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve batches with scripts',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get script details by scriptId
+     *
+     * @param Request $request
+     * @param int $scriptId
+     * @return JsonResponse
+     */
+    public function getScriptById(Request $request, int $scriptId): JsonResponse
+    {
+        try {
+            if ($scriptId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid script ID',
+                    'error' => 'Script ID must be a positive integer'
+                ], 400);
+            }
+
+            $script = TblCcScript::find($scriptId);
+
+            if (!$script) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Script not found',
+                    'error' => 'The specified script does not exist'
+                ], 404);
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Script retrieved successfully',
-                'data' => $script
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to retrieve script', [
-                'scriptId' => $id,
-                'error' => $e->getMessage()
-            ]);
-
-            $statusCode = $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException ? 404 : 500;
-
-            return response()->json([
-                'success' => false,
-                'message' => $statusCode === 404 ? 'Script not found' : 'Failed to retrieve script',
-                'error' => $statusCode === 404 ? 'The requested script does not exist' : 'Internal server error'
-            ], $statusCode);
-        }
-    }
-
-    /**
-     * Get scripts filtered by source
-     *
-     * @param string $source
-     * @return JsonResponse
-     */
-    public function getBySource(string $source): JsonResponse
-    {
-        try {
-            // Validate source
-            if (!in_array($source, TblCcScript::getSources())) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid source',
-                    'error' => 'Source must be one of: ' . implode(', ', TblCcScript::getSources())
-                ], 400);
-            }
-
-            $scripts = TblCcScript::where('scriptActive', true)
-                                 ->where('source', $source)
-                                 ->orderBy('segment')
-                                 ->orderBy('receiver')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Scripts for source '{$source}' retrieved successfully",
-                'data' => $scripts,
-                'source' => $source,
-                'total' => $scripts->count()
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to get scripts by source', [
-                'source' => $source,
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve scripts by source',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get scripts filtered by segment
-     *
-     * @param string $segment
-     * @return JsonResponse
-     */
-    public function getBySegment(string $segment): JsonResponse
-    {
-        try {
-            // Validate segment
-            if (!in_array($segment, TblCcScript::getSegments())) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid segment',
-                    'error' => 'Segment must be one of: ' . implode(', ', TblCcScript::getSegments())
-                ], 400);
-            }
-
-            $scripts = TblCcScript::where('scriptActive', true)
-                                 ->where('segment', $segment)
-                                 ->orderBy('source')
-                                 ->orderBy('receiver')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Scripts for segment '{$segment}' retrieved successfully",
-                'data' => $scripts,
-                'segment' => $segment,
-                'total' => $scripts->count()
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to get scripts by segment', [
-                'segment' => $segment,
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve scripts by segment',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get scripts filtered by receiver
-     *
-     * @param string $receiver
-     * @return JsonResponse
-     */
-    public function getByReceiver(string $receiver): JsonResponse
-    {
-        try {
-            // Validate receiver
-            if (!in_array($receiver, TblCcScript::getReceivers())) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid receiver',
-                    'error' => 'Receiver must be one of: ' . implode(', ', TblCcScript::getReceivers())
-                ], 400);
-            }
-
-            $scripts = TblCcScript::where('scriptActive', true)
-                                 ->where('receiver', $receiver)
-                                 ->orderBy('source')
-                                 ->orderBy('segment')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get();
-
-            return response()->json([
-                'success' => true,
-                'message' => "Scripts for receiver '{$receiver}' retrieved successfully",
-                'data' => $scripts,
-                'receiver' => $receiver,
-                'total' => $scripts->count()
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to get scripts by receiver', [
-                'receiver' => $receiver,
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve scripts by receiver',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get scripts grouped by combinations
-     *
-     * @return JsonResponse
-     */
-    public function getGrouped(): JsonResponse
-    {
-        try {
-            $scripts = TblCcScript::where('scriptActive', true)
-                                 ->orderBy('source')
-                                 ->orderBy('segment')
-                                 ->orderBy('receiver')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get()
-                                 ->groupBy(['source', 'segment', 'receiver']);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Scripts grouped by source, segment, and receiver retrieved successfully',
-                'data' => $scripts,
-                'summary' => [
-                    'total_scripts' => $scripts->flatten(3)->count(),
-                    'sources' => $scripts->keys(),
-                    'structure' => 'source -> segment -> receiver -> scripts[]'
-                ]
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to get grouped scripts', [
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve grouped scripts',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get metadata (available options)
-     *
-     * @return JsonResponse
-     */
-    public function getMetadata(): JsonResponse
-    {
-        try {
-            return response()->json([
-                'success' => true,
-                'message' => 'Script metadata retrieved successfully',
                 'data' => [
-                    'sources' => TblCcScript::getSources(),
-                    'segments' => TblCcScript::getSegments(),
-                    'receivers' => TblCcScript::getReceivers(),
+                    'scriptId' => $script->scriptId,
+                    'receiver' => $script->receiver,
+                    'daysPastDueFrom' => $script->daysPastDueFrom,
+                    'daysPastDueTo' => $script->daysPastDueTo,
+                    'scriptContentBur' => $script->scriptContentBur,
+                    'scriptContentEng' => $script->scriptContentEng,
+                    'scriptRemark' => $script->scriptRemark,
+                    'scriptActive' => $script->scriptActive,
+                    'dtDeactivated' => $script->dtDeactivated?->format('Y-m-d H:i:s'),
+                    'createdAt' => $script->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $script->updatedAt?->format('Y-m-d H:i:s'),
                 ]
             ], 200);
 
         } catch (Exception $e) {
-            Log::error('Failed to get script metadata', [
+            Log::error('Failed to get script by ID', [
+                'script_id' => $scriptId,
                 'error' => $e->getMessage()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve metadata',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get all scripts (including inactive)
-     *
-     * @return JsonResponse
-     */
-    public function all(): JsonResponse
-    {
-        try {
-            $scripts = TblCcScript::orderBy('source')
-                                 ->orderBy('segment')
-                                 ->orderBy('receiver')
-                                 ->orderBy('daysPastDueFrom')
-                                 ->get();
-
-            $active = $scripts->where('scriptActive', true);
-            $inactive = $scripts->where('scriptActive', false);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'All scripts retrieved successfully',
-                'data' => $scripts,
-                'summary' => [
-                    'total' => $scripts->count(),
-                    'active' => $active->count(),
-                    'inactive' => $inactive->count(),
-                    'by_source' => $scripts->groupBy('source')->map->count(),
-                    'by_segment' => $scripts->groupBy('segment')->map->count(),
-                    'by_receiver' => $scripts->groupBy('receiver')->map->count()
-                ]
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to retrieve all scripts', [
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve all scripts',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Get simple statistics
-     *
-     * @return JsonResponse
-     */
-    public function stats(): JsonResponse
-    {
-        try {
-            $total = TblCcScript::count();
-            $active = TblCcScript::where('scriptActive', true)->count();
-            $inactive = TblCcScript::where('scriptActive', false)->count();
-            $deactivated = TblCcScript::whereNotNull('dtDeactivated')->count();
-
-            $bySource = TblCcScript::select('source')
-                                  ->selectRaw('COUNT(*) as count')
-                                  ->selectRaw('SUM(CASE WHEN scriptActive = true THEN 1 ELSE 0 END) as active_count')
-                                  ->groupBy('source')
-                                  ->orderBy('source')
-                                  ->get();
-
-            $bySegment = TblCcScript::select('segment')
-                                   ->selectRaw('COUNT(*) as count')
-                                   ->selectRaw('SUM(CASE WHEN scriptActive = true THEN 1 ELSE 0 END) as active_count')
-                                   ->groupBy('segment')
-                                   ->orderBy('segment')
-                                   ->get();
-
-            $byReceiver = TblCcScript::select('receiver')
-                                    ->selectRaw('COUNT(*) as count')
-                                    ->selectRaw('SUM(CASE WHEN scriptActive = true THEN 1 ELSE 0 END) as active_count')
-                                    ->groupBy('receiver')
-                                    ->orderBy('receiver')
-                                    ->get();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Statistics retrieved successfully',
-                'data' => [
-                    'total_scripts' => $total,
-                    'active_scripts' => $active,
-                    'inactive_scripts' => $inactive,
-                    'deactivated_scripts' => $deactivated,
-                    'by_source' => $bySource,
-                    'by_segment' => $bySegment,
-                    'by_receiver' => $byReceiver,
-                ]
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to get script statistics', [
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve statistics',
+                'message' => 'Failed to retrieve script',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }

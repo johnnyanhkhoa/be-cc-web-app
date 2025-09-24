@@ -128,34 +128,19 @@ Route::prefix('cc-remarks')->group(function () {
     Route::get('/stats/summary', [TblCcRemarkController::class, 'stats']);
 });
 
-// TblCcScript API Routes (Read Only - Simple)
-Route::prefix('cc-scripts')->group(function () {
-    // Get all active scripts
-    Route::get('/', [TblCcScriptController::class, 'index']);
+// Script API Routes
+Route::prefix('scripts')->group(function () {
+    // Get scripts by batchId and daysPastDue (NEW main endpoint)
+    Route::get('/batch/{batchId}/days/{daysPastDue}', [TblCcScriptController::class, 'getScriptsByBatchIdAndDays']);
 
-    // Get specific script by ID
-    Route::get('/{id}', [TblCcScriptController::class, 'show']);
+    // Get scripts by batchId only (backward compatibility)
+    Route::get('/batch/{batchId}', [TblCcScriptController::class, 'getScriptsByBatchId']);
 
-    // Get scripts by source (normal/dslp)
-    Route::get('/source/{source}', [TblCcScriptController::class, 'getBySource']);
+    // Get scripts with multiple filters
+    Route::get('/', [TblCcScriptController::class, 'getScripts']);
 
-    // Get scripts by segment (pre-due/past-due)
-    Route::get('/segment/{segment}', [TblCcScriptController::class, 'getBySegment']);
-
-    // Get scripts by receiver (rpc/tpc)
-    Route::get('/receiver/{receiver}', [TblCcScriptController::class, 'getByReceiver']);
-
-    // Get scripts grouped by combinations
-    Route::get('/group/all', [TblCcScriptController::class, 'getGrouped']);
-
-    // Get metadata (available options)
-    Route::get('/meta/options', [TblCcScriptController::class, 'getMetadata']);
-
-    // Get all scripts (including inactive)
-    Route::get('/all/records', [TblCcScriptController::class, 'all']);
-
-    // Get simple statistics
-    Route::get('/stats/summary', [TblCcScriptController::class, 'stats']);
+    // Get script by ID
+    Route::get('/{scriptId}', [TblCcScriptController::class, 'getScriptById']);
 });
 
 // TblCcPhoneCollectionDetail API Routes
@@ -177,6 +162,8 @@ Route::prefix('attempts')->group(function () {
     // Get all call attempts for a specific phone collection
     Route::get('/{phoneCollectionId}', [TblCcPhoneCollectionDetailController::class, 'getCallAttempts']);
 });
+
+
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {

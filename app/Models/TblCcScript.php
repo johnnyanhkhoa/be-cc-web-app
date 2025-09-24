@@ -389,4 +389,15 @@ class TblCcScript extends Model
             // $model->save();
         });
     }
+
+    public function scopeForDaysPastDue($query, $daysPastDue)
+    {
+        return $query->where(function ($q) use ($daysPastDue) {
+            $q->where('daysPastDueFrom', '<=', $daysPastDue)
+            ->where(function ($subQ) use ($daysPastDue) {
+                $subQ->where('daysPastDueTo', '>=', $daysPastDue)
+                    ->orWhereNull('daysPastDueTo');
+            });
+        });
+    }
 }
