@@ -62,11 +62,17 @@ Route::prefix('calls')->group(function () {
 
 // Contract Information Routes
 Route::prefix('contracts')->group(function () {
-    // Get contract details by contractId
-    Route::get('/{contractId}', [App\Http\Controllers\API\ContractController::class, 'getContractDetails']);
+    // Get contract details by phoneCollectionId (main endpoint)
+    // /api/contracts/1234 where 1234 is phoneCollectionId
+    Route::get('/{phoneCollectionId}', [App\Http\Controllers\API\ContractController::class, 'getContractDetails']);
 
-    // Get contract summary (minimal info)
-    Route::get('/{contractId}/summary', [App\Http\Controllers\API\ContractController::class, 'getContractSummary']);
+    // Get contract details directly by contractId (optional)
+    // /api/contracts/direct/495347 where 495347 is contractId
+    Route::get('/direct/{contractId}', [App\Http\Controllers\API\ContractController::class, 'getContractDetailsByContractId']);
+
+    // Get phone collection info with contract details combined
+    // /api/contracts/1234/full where 1234 is phoneCollectionId
+    Route::get('/{phoneCollectionId}/full', [App\Http\Controllers\API\ContractController::class, 'getPhoneCollectionWithContract']);
 });
 
 // Call Assignment Routes
