@@ -54,14 +54,15 @@ class SyncPhoneCollections extends Command
 
     protected function isScheduledTime(): bool
     {
-        // Check if current time is 6:00 AM Vietnam time (UTC+7)
-        $vietnamTime = now()->setTimezone('Asia/Ho_Chi_Minh');
-        $scheduledHour = 6;
-        $scheduledMinute = 0;
+        // // Check if current time is 6:00 AM Vietnam time (UTC+7)
+        // $vietnamTime = now()->setTimezone('Asia/Ho_Chi_Minh');
+        // $scheduledHour = 6;
+        // $scheduledMinute = 0;
 
-        return $vietnamTime->hour === $scheduledHour &&
-            $vietnamTime->minute >= $scheduledMinute &&
-            $vietnamTime->minute < ($scheduledMinute + 30); // 30 minute window
+        // return $vietnamTime->hour === $scheduledHour &&
+        //     $vietnamTime->minute >= $scheduledMinute &&
+        //     $vietnamTime->minute < ($scheduledMinute + 30); // 30 minute window
+        return true;
     }
 
     protected function displayResults(array $results): void

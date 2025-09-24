@@ -16,8 +16,8 @@ Schedule::command('calls:assign-daily')
 
 // Thêm dòng này - Schedule sync phone collections daily at 5:30 AM Vietnam time
 Schedule::command('sync:phone-collections')
-    ->dailyAt('06:00')
-    ->timezone('Asia/Ho_Chi_Minh')
+    ->dailyAt('03:00')
+    // ->timezone('Asia/Ho_Chi_Minh')
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/phone-collection-sync.log'));
