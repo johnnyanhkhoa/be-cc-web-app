@@ -160,7 +160,7 @@ Route::prefix('cc-scripts')->group(function () {
 
 // TblCcPhoneCollectionDetail API Routes
 Route::prefix('cc-phone-collection-details')->group(function () {
-    // Create new phone collection detail
+    // Create new phone collection detail (now requires phoneCollectionId)
     Route::post('/', [TblCcPhoneCollectionDetailController::class, 'store']);
 
     // Get supporting data for forms
@@ -170,6 +170,12 @@ Route::prefix('cc-phone-collection-details')->group(function () {
 
     // Get recent records for reference
     Route::get('/recent', [TblCcPhoneCollectionDetailController::class, 'getRecent']);
+});
+
+// Call Attempts API Routes (NEW)
+Route::prefix('attempts')->group(function () {
+    // Get all call attempts for a specific phone collection
+    Route::get('/{phoneCollectionId}', [TblCcPhoneCollectionDetailController::class, 'getCallAttempts']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)

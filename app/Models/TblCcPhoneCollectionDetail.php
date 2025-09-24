@@ -30,6 +30,7 @@ class TblCcPhoneCollectionDetail extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'phoneCollectionId', // NEW FIELD
         'contactType',
         'phoneId',
         'contactDetailId',
@@ -151,6 +152,14 @@ class TblCcPhoneCollectionDetail extends Model
     }
 
     /**
+     * Relationship with TblCcPhoneCollection
+     */
+    public function phoneCollection()
+    {
+        return $this->belongsTo(TblCcPhoneCollection::class, 'phoneCollectionId', 'phoneCollectionId');
+    }
+
+    /**
      * Relationship with TblCcRemark
      */
     public function standardRemark()
@@ -175,13 +184,37 @@ class TblCcPhoneCollectionDetail extends Model
     }
 
     /**
+     * Scope: Filter by phoneCollectionId
+     */
+    public function scopeByPhoneCollectionId($query, $phoneCollectionId)
+    {
+        return $query->where('phoneCollectionId', $phoneCollectionId);
+    }
+
+    /**
+     * Scope: Filter by contact type
+     */
+    public function scopeByContactType($query, $contactType)
+    {
+        return $query->where('contactType', $contactType);
+    }
+
+    /**
+     * Scope: Filter by call status
+     */
+    public function scopeByCallStatus($query, $callStatus)
+    {
+        return $query->where('callStatus', $callStatus);
+    }
+
+    /**
      * Boot the model to automatically set audit fields
      */
     protected static function boot()
     {
         parent::boot();
 
-        // Set personCreated when creating
+        // Set createdBy when creating
         static::creating(function ($model) {
             // Auto set createdAt
             if (!$model->createdAt) {
@@ -189,15 +222,15 @@ class TblCcPhoneCollectionDetail extends Model
             }
 
             // TODO: Set from authenticated user when auth is implemented
-            // if (!$model->personCreated && auth()->check()) {
-            //     $model->personCreated = auth()->id();
+            // if (!$model->createdBy && auth()->check()) {
+            //     $model->createdBy = auth()->id();
             // }
         });
 
-        // Set personUpdated when updating
+        // Set updatedBy when updating
         static::updating(function ($model) {
             // TODO: Set from authenticated user when auth is implemented
-            // $model->personUpdated = auth()->id();
+            // $model->updatedBy = auth()->id();
         });
     }
 }

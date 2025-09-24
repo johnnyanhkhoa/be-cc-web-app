@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use App\Models\TblCcPhoneCollectionDetail;
 
 class CreateCcPhoneCollectionDetailRequest extends FormRequest
 {
@@ -23,6 +22,9 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // Phone Collection Reference (NEW)
+            'phoneCollectionId' => ['required', 'integer', 'exists:tbl_CcPhoneCollection,phoneCollectionId'],
+
             // Contact Information
             'contactType' => ['nullable', 'string', 'in:rpc,tpc,rb'],
             'phoneId' => ['nullable', 'integer'],
@@ -69,6 +71,8 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'phoneCollectionId.required' => 'Phone collection ID is required',
+            'phoneCollectionId.exists' => 'The selected phone collection does not exist',
             'contactType.in' => 'Contact type must be one of: rpc, tpc, rb',
             'callStatus.in' => 'Call status must be one of: reached, ring, busy, cancelled, power_off, wrong_number, no_contact',
             'callResultId.exists' => 'The selected call result does not exist',
@@ -76,7 +80,7 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'promisedPaymentDate.after_or_equal' => 'Promised payment date must be today or in the future',
             'dtCallLater.after_or_equal' => 'Call later date must be today or in the future',
             'dtCallEnded.after' => 'Call end time must be after call start time',
-            'createdBy.required' => 'Person created is required for audit tracking',
+            'createdBy.required' => 'Created by is required for audit tracking',
             'uploadDocuments.json' => 'Upload documents must be a valid JSON format',
         ];
     }
@@ -87,6 +91,7 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
     public function attributes(): array
     {
         return [
+            'phoneCollectionId' => 'phone collection ID',
             'contactPhoneNumer' => 'contact phone number',
             'dtCallLater' => 'call later date',
             'dtCallStarted' => 'call start time',
@@ -96,37 +101,7 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'reschedulingEvidence' => 'rescheduling evidence',
             'standardRemarkId' => 'standard remark',
             'callResultId' => 'call result',
-            'createdBy' => 'person created',
+            'createdBy' => 'created by',
         ];
     }
-
-    /**
-     * Configure the validator instance.
-     *
-     * @param  \Illuminate\Validation\Validator  $validator
-     * @return void
-     */
-    // public function withValidator($validator)
-    // {
-    //     $validator->after(function ($validator) {
-    //         // Custom validation: If uploadDocuments is provided, validate JSON structure
-    //         if ($this->filled('uploadDocuments')) {
-    //             $uploadDocuments = $this->get('uploadDocuments');
-    //             $documents = json_decode($uploadDocuments, true);
-    //             if (json_last_error() !== JSON_ERROR_NONE) {
-    //                 $validator->errors()->add('uploadDocuments', 'Invalid JSON format for upload documents');
-    //             }
-    //         }
-
-    //         // Custom validation: Ensure call timing makes sense
-    //         if ($this->filled('dtCallStarted') && $this->filled('dtCallEnded')) {
-    //             $startTime = $this->get('dtCallStarted');
-    //             $endTime = $this->get('dtCallEnded');
-
-    //             if ($startTime && $endTime && strtotime($endTime) <= strtotime($startTime)) {
-    //                 $validator->errors()->add('dtCallEnded', 'Call end time must be after call start time');
-    //             }
-    //         }
-    //     });
-    // }
 }
