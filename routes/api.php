@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\DutyRosterController;
+use App\Http\Controllers\API\PMTGuidelineController;
 use App\Http\Controllers\API\TblCcPhoneCollectionController;
 use App\Http\Controllers\API\TblCcPhoneCollectionDetailController;
 use App\Http\Controllers\API\TblCcReasonController;
@@ -163,7 +164,20 @@ Route::prefix('attempts')->group(function () {
     Route::get('/{phoneCollectionId}', [TblCcPhoneCollectionDetailController::class, 'getCallAttempts']);
 });
 
+// Payment Guideline API Routes
+Route::prefix('payment-guidelines')->group(function () {
+    // Get payment guideline by name (main endpoint)
+    Route::post('/by-name', [PMTGuidelineController::class, 'getByName']);
 
+    // Get all payment guidelines
+    Route::get('/', [PMTGuidelineController::class, 'getAll']);
+
+    // Search payment guidelines
+    Route::get('/search', [PMTGuidelineController::class, 'search']);
+
+    // Get payment guideline by ID
+    Route::get('/{pmtId}', [PMTGuidelineController::class, 'getById']);
+});
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
