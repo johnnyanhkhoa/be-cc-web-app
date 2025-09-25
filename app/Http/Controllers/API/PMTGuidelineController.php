@@ -85,7 +85,7 @@ class PMTGuidelineController extends Controller
     }
 
     /**
-     * Get all available payment guidelines
+     * Get all available payment guidelines with full details
      *
      * @return JsonResponse
      */
@@ -98,9 +98,12 @@ class PMTGuidelineController extends Controller
                 return [
                     'pmtId' => $guideline->pmtId,
                     'pmtName' => $guideline->pmtName,
+                    'pmtStep' => $guideline->pmtStep,
                     'pmtRemark' => $guideline->pmtRemark,
+                    'formattedSteps' => $guideline->getFormattedSteps(),
                     'stepCount' => count($guideline->getStepsArray()),
                     'createdAt' => $guideline->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $guideline->updatedAt?->format('Y-m-d H:i:s'),
                 ];
             });
 
