@@ -81,14 +81,14 @@ class TblCcScriptController extends Controller
                 ->where('scriptActive', true)
                 ->where(function ($query) use ($daysPastDue) {
                     $query->where(function ($q) use ($daysPastDue) {
-                        // Check if daysPastDue falls within the range
-                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
-                          ->where('daysPastDueTo', '>=', $daysPastDue);
-                    })
-                    ->orWhere(function ($q) use ($daysPastDue) {
-                        // Handle cases where daysPastDueTo might be null (open-ended range)
-                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
-                          ->whereNull('daysPastDueTo');
+                        $q->where(function ($subQ) use ($daysPastDue) {
+                            $subQ->whereNull('daysPastDueFrom')
+                                ->orWhere('daysPastDueFrom', '<=', $daysPastDue);
+                        })
+                        ->where(function ($subQ) use ($daysPastDue) {
+                            $subQ->whereNull('daysPastDueTo')
+                                ->orWhere('daysPastDueTo', '>=', $daysPastDue);
+                        });
                     });
                 })
                 ->orderBy('daysPastDueFrom', 'asc')
@@ -255,20 +255,31 @@ class TblCcScriptController extends Controller
                 'script_count' => count($scriptIds)
             ]);
 
-            // Step 4: Get scripts that match the criteria
+            // Step 4: Get scripts that match the criteria (FIXED)
             $matchingScripts = TblCcScript::whereIn('scriptId', $scriptIds)
                 ->where('scriptActive', true)
                 ->where(function ($query) use ($daysPastDue) {
-                    $query->where(function ($q) use ($daysPastDue) {
-                        // Check if daysPastDue falls within the range
-                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
-                          ->where('daysPastDueTo', '>=', $daysPastDue);
-                    })
-                    ->orWhere(function ($q) use ($daysPastDue) {
-                        // Handle cases where daysPastDueTo might be null (open-ended range)
-                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
-                          ->whereNull('daysPastDueTo');
-                    });
+                    $query
+                        // Case 1: Both daysPastDueFrom and daysPastDueTo are NULL (match all)
+                        ->where(function ($q) {
+                            $q->whereNull('daysPastDueFrom')
+                            ->whereNull('daysPastDueTo');
+                        })
+                        // Case 2: daysPastDueFrom is NULL, daysPastDueTo has value
+                        ->orWhere(function ($q) use ($daysPastDue) {
+                            $q->whereNull('daysPastDueFrom')
+                            ->where('daysPastDueTo', '>=', $daysPastDue);
+                        })
+                        // Case 3: daysPastDueFrom has value, daysPastDueTo is NULL
+                        ->orWhere(function ($q) use ($daysPastDue) {
+                            $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                            ->whereNull('daysPastDueTo');
+                        })
+                        // Case 4: Both have values (normal range check)
+                        ->orWhere(function ($q) use ($daysPastDue) {
+                            $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                            ->where('daysPastDueTo', '>=', $daysPastDue);
+                        });
                 })
                 ->orderBy('daysPastDueFrom', 'asc')
                 ->orderBy('scriptId', 'asc')
