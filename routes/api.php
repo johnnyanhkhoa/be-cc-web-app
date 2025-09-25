@@ -130,16 +130,16 @@ Route::prefix('cc-remarks')->group(function () {
 
 // Script API Routes
 Route::prefix('scripts')->group(function () {
-    // Get scripts by batchId and daysPastDue (NEW main endpoint)
-    Route::get('/batch/{batchId}/days/{daysPastDue}', [TblCcScriptController::class, 'getScriptsByBatchIdAndDays']);
+    // Get scripts based on batchId and daysPastDue
+    Route::post('/', [TblCcScriptController::class, 'getScripts']);
 
-    // Get scripts by batchId only (backward compatibility)
-    Route::get('/batch/{batchId}', [TblCcScriptController::class, 'getScriptsByBatchId']);
+    // Get scripts by phoneCollectionId (NEW)
+    Route::get('/phone-collection/{phoneCollectionId}', [TblCcScriptController::class, 'getScriptsByPhoneCollection']);
 
-    // Get scripts with multiple filters
-    Route::get('/', [TblCcScriptController::class, 'getScripts']);
+    // Get all active batches with script collections
+    Route::get('/batches', [TblCcScriptController::class, 'getBatchesWithScripts']);
 
-    // Get script by ID
+    // Get script details by scriptId
     Route::get('/{scriptId}', [TblCcScriptController::class, 'getScriptById']);
 });
 

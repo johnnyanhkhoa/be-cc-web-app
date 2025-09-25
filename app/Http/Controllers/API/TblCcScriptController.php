@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GetScriptsRequest;
 use App\Models\TblCcBatch;
+use App\Models\TblCcPhoneCollection;
 use App\Models\TblCcScript;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -155,6 +156,200 @@ class TblCcScriptController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve scripts',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    public function getScriptsByPhoneCollection(Request $request, int $phoneCollectionId): JsonResponse
+    {
+        try {
+            // Validate phoneCollectionId
+            if ($phoneCollectionId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid phone collection ID',
+                    'error' => 'Phone collection ID must be a positive integer'
+                ], 400);
+            }
+
+            Log::info('Getting scripts by phone collection ID', [
+                'phone_collection_id' => $phoneCollectionId
+            ]);
+
+            // Step 1: Find phone collection record
+            $phoneCollection = TblCcPhoneCollection::find($phoneCollectionId);
+
+            if (!$phoneCollection) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phone collection not found',
+                    'error' => 'The specified phone collection does not exist'
+                ], 404);
+            }
+
+            $batchId = $phoneCollection->batchId;
+            $daysPastDue = $phoneCollection->daysOverdueNet;
+
+            Log::info('Found phone collection data', [
+                'phone_collection_id' => $phoneCollectionId,
+                'batch_id' => $batchId,
+                'days_overdue_net' => $daysPastDue,
+                'customer_name' => $phoneCollection->customerFullName,
+                'contract_id' => $phoneCollection->contractId
+            ]);
+
+            // Check if batchId exists
+            if (!$batchId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No batch assigned to this phone collection',
+                    'error' => 'Phone collection does not have a batch ID'
+                ], 400);
+            }
+
+            // Step 2: Get batch with scriptCollectionId
+            $batch = TblCcBatch::find($batchId);
+
+            if (!$batch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch not found',
+                    'error' => 'The batch assigned to this phone collection does not exist'
+                ], 404);
+            }
+
+            // Check if batch is active
+            if (!$batch->batchActive) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batch is not active',
+                    'error' => 'The batch assigned to this phone collection is deactivated'
+                ], 400);
+            }
+
+            // Step 3: Parse scriptCollectionId JSON
+            $scriptCollectionId = $batch->scriptCollectionId;
+
+            if (!$scriptCollectionId || !isset($scriptCollectionId['scriptId']) || !is_array($scriptCollectionId['scriptId'])) {
+                Log::warning('Invalid or empty scriptCollectionId for phone collection', [
+                    'phone_collection_id' => $phoneCollectionId,
+                    'batch_id' => $batchId,
+                    'script_collection_id' => $scriptCollectionId
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No script collection found for this batch',
+                    'error' => 'Batch does not have valid script collection data'
+                ], 400);
+            }
+
+            $scriptIds = $scriptCollectionId['scriptId'];
+
+            Log::info('Found script IDs for phone collection', [
+                'phone_collection_id' => $phoneCollectionId,
+                'batch_id' => $batchId,
+                'days_past_due' => $daysPastDue,
+                'script_ids' => $scriptIds,
+                'script_count' => count($scriptIds)
+            ]);
+
+            // Step 4: Get scripts that match the criteria
+            $matchingScripts = TblCcScript::whereIn('scriptId', $scriptIds)
+                ->where('scriptActive', true)
+                ->where(function ($query) use ($daysPastDue) {
+                    $query->where(function ($q) use ($daysPastDue) {
+                        // Check if daysPastDue falls within the range
+                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                          ->where('daysPastDueTo', '>=', $daysPastDue);
+                    })
+                    ->orWhere(function ($q) use ($daysPastDue) {
+                        // Handle cases where daysPastDueTo might be null (open-ended range)
+                        $q->where('daysPastDueFrom', '<=', $daysPastDue)
+                          ->whereNull('daysPastDueTo');
+                    });
+                })
+                ->orderBy('daysPastDueFrom', 'asc')
+                ->orderBy('scriptId', 'asc')
+                ->get();
+
+            Log::info('Found matching scripts for phone collection', [
+                'phone_collection_id' => $phoneCollectionId,
+                'batch_id' => $batchId,
+                'days_past_due' => $daysPastDue,
+                'matching_scripts_count' => $matchingScripts->count(),
+                'matching_script_ids' => $matchingScripts->pluck('scriptId')->toArray()
+            ]);
+
+            // Step 5: Transform data for response
+            $transformedScripts = $matchingScripts->map(function ($script) {
+                return [
+                    'scriptId' => $script->scriptId,
+                    'receiver' => $script->receiver,
+                    'daysPastDueFrom' => $script->daysPastDueFrom,
+                    'daysPastDueTo' => $script->daysPastDueTo,
+                    'scriptContentBur' => $script->scriptContentBur,
+                    'scriptContentEng' => $script->scriptContentEng,
+                    'scriptRemark' => $script->scriptRemark,
+                    'scriptActive' => $script->scriptActive,
+                    'createdAt' => $script->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $script->updatedAt?->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Scripts retrieved successfully by phone collection',
+                'data' => [
+                    'phoneCollection' => [
+                        'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                        'contractId' => $phoneCollection->contractId,
+                        'customerId' => $phoneCollection->customerId,
+                        'customerFullName' => $phoneCollection->customerFullName,
+                        'batchId' => $phoneCollection->batchId,
+                        'daysOverdueNet' => $phoneCollection->daysOverdueNet,
+                        'segmentType' => $phoneCollection->segmentType,
+                        'status' => $phoneCollection->status,
+                        'totalAmount' => $phoneCollection->totalAmount,
+                        'amountUnpaid' => $phoneCollection->amountUnpaid,
+                        'dueDate' => $phoneCollection->dueDate?->format('Y-m-d'),
+                    ],
+                    'batch' => [
+                        'batchId' => $batch->batchId,
+                        'type' => $batch->type,
+                        'code' => $batch->code,
+                        'segmentType' => $batch->segmentType,
+                        'batchActive' => $batch->batchActive,
+                        'scriptCollectionId' => $batch->scriptCollectionId,
+                    ],
+                    'criteria' => [
+                        'phoneCollectionId' => $phoneCollectionId,
+                        'batchId' => $batchId,
+                        'daysPastDue' => $daysPastDue,
+                        'availableScriptIds' => $scriptIds,
+                    ],
+                    'scripts' => $transformedScripts,
+                    'summary' => [
+                        'totalScriptsInBatch' => count($scriptIds),
+                        'matchingScripts' => $matchingScripts->count(),
+                        'matchingScriptIds' => $matchingScripts->pluck('scriptId')->toArray(),
+                        'receivers' => $matchingScripts->pluck('receiver')->unique()->values(),
+                        'daysPastDueUsed' => $daysPastDue,
+                    ]
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to get scripts by phone collection', [
+                'phone_collection_id' => $phoneCollectionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve scripts by phone collection',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
