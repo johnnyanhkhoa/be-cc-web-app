@@ -20,3 +20,7 @@ Route::get('/storage/{path}', function ($path) {
         'Cache-Control' => 'public, max-age=31536000'
     ]);
 })->where('path', '.*')->name('storage.serve');
+
+Route::get('/storage-test', function() {
+    return response()->json(['message' => 'Route accessible']);
+});
