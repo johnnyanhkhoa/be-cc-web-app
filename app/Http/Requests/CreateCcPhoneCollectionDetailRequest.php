@@ -11,18 +11,16 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true; // Adjust based on your auth requirements
+        return true;
     }
 
     /**
      * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
-            // Phone Collection Reference (NEW)
+            // Phone Collection Reference
             'phoneCollectionId' => ['required', 'integer', 'exists:tbl_CcPhoneCollection,phoneCollectionId'],
 
             // Contact Information
@@ -56,12 +54,13 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'standardRemarkId' => ['nullable', 'integer', 'exists:tbl_CcRemark,remarkId'],
             'standardRemarkContent' => ['nullable', 'string'],
 
-            // Evidence and Documents
+            // Evidence and Documents - UPDATED
             'reschedulingEvidence' => ['nullable', 'boolean'],
-            'uploadDocuments' => ['nullable', 'json'],
+            'uploadDocuments' => ['nullable', 'array'], // Changed from json to array
+            'uploadDocuments.*' => ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // 5MB max
 
             // Audit
-            'createdBy' => ['required', 'integer'], // Required for tracking
+            'createdBy' => ['required', 'integer'],
         ];
     }
 
@@ -81,27 +80,9 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'dtCallLater.after_or_equal' => 'Call later date must be today or in the future',
             'dtCallEnded.after' => 'Call end time must be after call start time',
             'createdBy.required' => 'Created by is required for audit tracking',
-            'uploadDocuments.json' => 'Upload documents must be a valid JSON format',
-        ];
-    }
-
-    /**
-     * Get custom attributes for validator errors.
-     */
-    public function attributes(): array
-    {
-        return [
-            'phoneCollectionId' => 'phone collection ID',
-            'contactPhoneNumer' => 'contact phone number',
-            'dtCallLater' => 'call later date',
-            'dtCallStarted' => 'call start time',
-            'dtCallEnded' => 'call end time',
-            'askingPostponePayment' => 'asking postpone payment',
-            'updatePhoneRequest' => 'update phone request',
-            'reschedulingEvidence' => 'rescheduling evidence',
-            'standardRemarkId' => 'standard remark',
-            'callResultId' => 'call result',
-            'createdBy' => 'created by',
+            'uploadDocuments.*.image' => 'Upload files must be images',
+            'uploadDocuments.*.mimes' => 'Images must be jpeg, png, jpg, gif, or webp format',
+            'uploadDocuments.*.max' => 'Each image must not exceed 5MB',
         ];
     }
 }

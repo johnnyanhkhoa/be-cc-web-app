@@ -8,6 +8,7 @@ use App\Models\TblCcPhoneCollectionDetail;
 use App\Models\TblCcPhoneCollection;
 use App\Models\TblCcRemark;
 use App\Models\TblCcCaseResult;
+use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +17,13 @@ use Exception;
 
 class TblCcPhoneCollectionDetailController extends Controller
 {
+    protected $imageUploadService;
+
+    public function __construct(ImageUploadService $imageUploadService)
+    {
+        $this->imageUploadService = $imageUploadService;
+    }
+
     /**
      * Create a new phone collection detail record
      *
@@ -24,6 +32,7 @@ class TblCcPhoneCollectionDetailController extends Controller
      */
     public function store(CreateCcPhoneCollectionDetailRequest $request): JsonResponse
     {
+        /** @var \Illuminate\Http\Request $request */
         try {
             $validatedData = $request->validated();
 
@@ -31,10 +40,32 @@ class TblCcPhoneCollectionDetailController extends Controller
                 'phone_collection_id' => $validatedData['phoneCollectionId'],
                 'contact_type' => $validatedData['contactType'] ?? null,
                 'call_status' => $validatedData['callStatus'] ?? null,
-                'createdBy' => $validatedData['createdBy']
+                'createdBy' => $validatedData['createdBy'],
+                'has_upload_files' => isset($validatedData['uploadDocuments']) && !empty($validatedData['uploadDocuments'])
             ]);
 
             DB::beginTransaction();
+
+            // Handle file uploads if present
+            $uploadDocumentsJson = null;
+            if (isset($validatedData['uploadDocuments']) && !empty($validatedData['uploadDocuments'])) {
+                $uploadedImages = $this->imageUploadService->uploadImages(
+                    $validatedData['uploadDocuments'],
+                    $validatedData['createdBy']
+                );
+
+                $uploadImageIds = collect($uploadedImages)->pluck('uploadImageId')->toArray();
+                $uploadDocumentsJson = ['uploadImageId' => $uploadImageIds];
+
+                Log::info('Images uploaded successfully', [
+                    'upload_image_ids' => $uploadImageIds,
+                    'total_images' => count($uploadedImages)
+                ]);
+            }
+
+            // Remove uploadDocuments from validated data and add JSON
+            unset($validatedData['uploadDocuments']);
+            $validatedData['uploadDocuments'] = $uploadDocumentsJson;
 
             // Create the record
             $phoneCollectionDetail = TblCcPhoneCollectionDetail::create($validatedData);
@@ -67,6 +98,12 @@ class TblCcPhoneCollectionDetailController extends Controller
             // Load relationships for response
             $phoneCollectionDetail->load(['standardRemark', 'creator', 'phoneCollection']);
 
+            // Get uploaded images for response
+            $uploadedImagesData = [];
+            if ($uploadDocumentsJson && isset($uploadDocumentsJson['uploadImageId'])) {
+                $uploadedImagesData = $this->imageUploadService->getImagesByIds($uploadDocumentsJson['uploadImageId']);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Phone collection detail created successfully',
@@ -94,6 +131,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkContent' => $phoneCollectionDetail->standardRemarkContent,
                     'reschedulingEvidence' => $phoneCollectionDetail->reschedulingEvidence,
                     'uploadDocuments' => $phoneCollectionDetail->uploadDocuments,
+                    'uploadedImages' => $uploadedImagesData, // Include image details
                     'createdAt' => $phoneCollectionDetail->createdAt?->format('Y-m-d H:i:s'),
                     'createdBy' => $phoneCollectionDetail->createdBy,
                     // Include related data if available
@@ -118,7 +156,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             Log::error('Failed to create phone collection detail', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'request_data' => $request->validated()
+                'request_data' => $request->except(['uploadDocuments']) // Don't log file data
             ]);
 
             return response()->json([
@@ -170,6 +208,12 @@ class TblCcPhoneCollectionDetailController extends Controller
 
             // Transform data for response
             $transformedAttempts = $attempts->map(function ($attempt) {
+                // Get uploaded images if exists
+                $uploadedImages = [];
+                if ($attempt->uploadDocuments && isset($attempt->uploadDocuments['uploadImageId'])) {
+                    $uploadedImages = $this->imageUploadService->getImagesByIds($attempt->uploadDocuments['uploadImageId']);
+                }
+
                 return [
                     'phoneCollectionDetailId' => $attempt->phoneCollectionDetailId,
                     'phoneCollectionId' => $attempt->phoneCollectionId,
@@ -193,7 +237,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkId' => $attempt->standardRemarkId,
                     'standardRemarkContent' => $attempt->standardRemarkContent,
                     'reschedulingEvidence' => $attempt->reschedulingEvidence,
-                    'uploadDocuments' => $attempt->uploadDocuments,
+                    'uploadDocuments' => $attempt->uploadDocuments, // Original JSON
+                    'uploadedImages' => $uploadedImages, // Expanded image data with fileName, localUrl, googleUrl
                     'createdAt' => $attempt->createdAt?->format('Y-m-d H:i:s'),
                     'createdBy' => $attempt->createdBy,
                     // Related data
@@ -341,7 +386,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'promisedPaymentDate' => 'Must be today or future date',
                         'dtCallLater' => 'Must be today or future date',
                         'dtCallEnded' => 'Must be after dtCallStarted',
-                        'uploadDocuments' => 'Must be valid JSON format',
+                        'uploadDocuments' => 'Array of image files (JPEG, PNG, GIF, WEBP, max 5MB each)',
                         'createdBy' => 'Required for audit tracking'
                     ]
                 ]
@@ -373,10 +418,34 @@ class TblCcPhoneCollectionDetailController extends Controller
                                                      ->take(10)
                                                      ->get();
 
+            // Transform data with uploaded images
+            $transformedDetails = $recentDetails->map(function ($detail) {
+                // Get uploaded images if exists
+                $uploadedImages = [];
+                if ($detail->uploadDocuments && isset($detail->uploadDocuments['uploadImageId'])) {
+                    $uploadedImages = $this->imageUploadService->getImagesByIds($detail->uploadDocuments['uploadImageId']);
+                }
+
+                return [
+                    'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
+                    'phoneCollectionId' => $detail->phoneCollectionId,
+                    'contactType' => $detail->contactType,
+                    'callStatus' => $detail->callStatus,
+                    'remark' => $detail->remark,
+                    'uploadDocuments' => $detail->uploadDocuments,
+                    'uploadedImages' => $uploadedImages,
+                    'createdAt' => $detail->createdAt?->format('Y-m-d H:i:s'),
+                    'phoneCollection' => $detail->phoneCollection ? [
+                        'contractId' => $detail->phoneCollection->contractId,
+                        'customerFullName' => $detail->phoneCollection->customerFullName,
+                    ] : null,
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Recent phone collection details retrieved successfully',
-                'data' => $recentDetails,
+                'data' => $transformedDetails,
                 'total' => $recentDetails->count()
             ], 200);
 
