@@ -54,10 +54,11 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'standardRemarkId' => ['nullable', 'integer', 'exists:tbl_CcRemark,remarkId'],
             'standardRemarkContent' => ['nullable', 'string'],
 
-            // Evidence and Documents - UPDATED
+            // Evidence and Documents - CHANGED: Now expects JSON with uploadImageId array
             'reschedulingEvidence' => ['nullable', 'boolean'],
-            'uploadDocuments' => ['nullable', 'array'], // Changed from json to array
-            'uploadDocuments.*' => ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // 5MB max
+            'uploadDocuments' => ['nullable', 'json'], // Back to JSON
+            'uploadImageIds' => ['nullable', 'array'], // NEW: Direct array of image IDs
+            'uploadImageIds.*' => ['integer', 'exists:tbl_CcUploadImage,uploadImageId'],
 
             // Audit
             'createdBy' => ['required', 'integer'],
@@ -80,9 +81,7 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'dtCallLater.after_or_equal' => 'Call later date must be today or in the future',
             'dtCallEnded.after' => 'Call end time must be after call start time',
             'createdBy.required' => 'Created by is required for audit tracking',
-            'uploadDocuments.*.image' => 'Upload files must be images',
-            'uploadDocuments.*.mimes' => 'Images must be jpeg, png, jpg, gif, or webp format',
-            'uploadDocuments.*.max' => 'Each image must not exceed 5MB',
+            'uploadImageIds.*.exists' => 'One or more uploaded images do not exist',
         ];
     }
 }

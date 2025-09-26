@@ -158,6 +158,15 @@ Route::prefix('cc-phone-collection-details')->group(function () {
     Route::get('/recent', [TblCcPhoneCollectionDetailController::class, 'getRecent']);
 });
 
+// Image Upload API Routes (NEW)
+Route::prefix('images')->group(function () {
+    // Upload multiple images
+    Route::post('/upload', [App\Http\Controllers\API\ImageUploadController::class, 'uploadImages']);
+
+    // Get images by IDs
+    Route::post('/by-ids', [App\Http\Controllers\API\ImageUploadController::class, 'getImagesByIds']);
+});
+
 // Call Attempts API Routes (NEW)
 Route::prefix('attempts')->group(function () {
     // Get all call attempts for a specific phone collection

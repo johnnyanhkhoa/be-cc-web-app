@@ -32,39 +32,36 @@ class TblCcPhoneCollectionDetailController extends Controller
      */
     public function store(CreateCcPhoneCollectionDetailRequest $request): JsonResponse
     {
-        /** @var \Illuminate\Http\Request $request */
         try {
             $validatedData = $request->validated();
 
-            Log::info('Creating phone collection detail', [
+            Log::info('Creating phone collection detail with JSON', [
                 'phone_collection_id' => $validatedData['phoneCollectionId'],
                 'contact_type' => $validatedData['contactType'] ?? null,
                 'call_status' => $validatedData['callStatus'] ?? null,
                 'createdBy' => $validatedData['createdBy'],
-                'has_upload_files' => isset($validatedData['uploadDocuments']) && !empty($validatedData['uploadDocuments'])
+                'has_upload_image_ids' => isset($validatedData['uploadImageIds']) && !empty($validatedData['uploadImageIds'])
             ]);
 
             DB::beginTransaction();
 
-            // Handle file uploads if present
+            // Handle uploadDocuments JSON
             $uploadDocumentsJson = null;
-            if (isset($validatedData['uploadDocuments']) && !empty($validatedData['uploadDocuments'])) {
-                $uploadedImages = $this->imageUploadService->uploadImages(
-                    $validatedData['uploadDocuments'],
-                    $validatedData['createdBy']
-                );
+            if (isset($validatedData['uploadImageIds']) && !empty($validatedData['uploadImageIds'])) {
+                $uploadDocumentsJson = ['uploadImageId' => $validatedData['uploadImageIds']];
 
-                $uploadImageIds = collect($uploadedImages)->pluck('uploadImageId')->toArray();
-                $uploadDocumentsJson = ['uploadImageId' => $uploadImageIds];
-
-                Log::info('Images uploaded successfully', [
-                    'upload_image_ids' => $uploadImageIds,
-                    'total_images' => count($uploadedImages)
+                Log::info('Using uploaded image IDs', [
+                    'upload_image_ids' => $validatedData['uploadImageIds']
                 ]);
+            } elseif (isset($validatedData['uploadDocuments'])) {
+                // Fallback: if uploadDocuments JSON is provided directly
+                $uploadDocumentsJson = is_string($validatedData['uploadDocuments'])
+                    ? json_decode($validatedData['uploadDocuments'], true)
+                    : $validatedData['uploadDocuments'];
             }
 
-            // Remove uploadDocuments from validated data and add JSON
-            unset($validatedData['uploadDocuments']);
+            // Remove uploadImageIds from data and set uploadDocuments
+            unset($validatedData['uploadImageIds']);
             $validatedData['uploadDocuments'] = $uploadDocumentsJson;
 
             // Create the record
@@ -79,21 +76,9 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'lastAttemptBy' => $validatedData['createdBy'],
                     'updatedBy' => $validatedData['createdBy'],
                 ]);
-
-                Log::info('Updated phone collection attempts count', [
-                    'phone_collection_id' => $validatedData['phoneCollectionId'],
-                    'total_attempts' => $phoneCollection->totalAttempts + 1
-                ]);
             }
 
             DB::commit();
-
-            Log::info('Phone collection detail created successfully', [
-                'phoneCollectionDetailId' => $phoneCollectionDetail->phoneCollectionDetailId,
-                'phone_collection_id' => $phoneCollectionDetail->phoneCollectionId,
-                'contact_type' => $phoneCollectionDetail->contactType,
-                'call_status' => $phoneCollectionDetail->callStatus
-            ]);
 
             // Load relationships for response
             $phoneCollectionDetail->load(['standardRemark', 'creator', 'phoneCollection']);
@@ -131,22 +116,9 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkContent' => $phoneCollectionDetail->standardRemarkContent,
                     'reschedulingEvidence' => $phoneCollectionDetail->reschedulingEvidence,
                     'uploadDocuments' => $phoneCollectionDetail->uploadDocuments,
-                    'uploadedImages' => $uploadedImagesData, // Include image details
+                    'uploadedImages' => $uploadedImagesData,
                     'createdAt' => $phoneCollectionDetail->createdAt?->format('Y-m-d H:i:s'),
                     'createdBy' => $phoneCollectionDetail->createdBy,
-                    // Include related data if available
-                    'standardRemark' => $phoneCollectionDetail->standardRemark,
-                    'phoneCollection' => $phoneCollectionDetail->phoneCollection ? [
-                        'phoneCollectionId' => $phoneCollectionDetail->phoneCollection->phoneCollectionId,
-                        'contractId' => $phoneCollectionDetail->phoneCollection->contractId,
-                        'customerFullName' => $phoneCollectionDetail->phoneCollection->customerFullName,
-                        'totalAttempts' => $phoneCollectionDetail->phoneCollection->totalAttempts,
-                    ] : null,
-                    'creator' => $phoneCollectionDetail->creator ? [
-                        'id' => $phoneCollectionDetail->creator->id,
-                        'username' => $phoneCollectionDetail->creator->username,
-                        'email' => $phoneCollectionDetail->creator->email,
-                    ] : null,
                 ]
             ], 201);
 
@@ -156,7 +128,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             Log::error('Failed to create phone collection detail', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'request_data' => $request->except(['uploadDocuments']) // Don't log file data
+                'request_data' => $request->validated()
             ]);
 
             return response()->json([
