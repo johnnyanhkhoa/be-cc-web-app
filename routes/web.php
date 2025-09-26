@@ -6,21 +6,12 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/storage/{path}', function ($path) {
-    $filePath = storage_path('app/public/' . $path);
+Route::get('/storage/cc-images/{filename}', function ($filename) {
+    $filePath = storage_path('app/public/cc-images/' . $filename);
 
     if (!file_exists($filePath)) {
         abort(404);
     }
 
-    $mimeType = mime_content_type($filePath);
-
-    return response()->file($filePath, [
-        'Content-Type' => $mimeType,
-        'Cache-Control' => 'public, max-age=31536000'
-    ]);
-})->where('path', '.*')->name('storage.serve');
-
-Route::get('/storage-test', function() {
-    return response()->json(['message' => 'Route accessible']);
-});
+    return response()->file($filePath);
+})->where('filename', '[A-Za-z0-9_\-\.]+');
