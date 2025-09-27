@@ -433,4 +433,133 @@ class TblCcPhoneCollectionDetailController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get all remarks for a specific contract
+     *
+     * @param Request $request
+     * @param int $contractId
+     * @return JsonResponse
+     */
+    public function getRemarksByContract(Request $request, int $contractId): JsonResponse
+    {
+        try {
+            // Validate contractId
+            if ($contractId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid contract ID',
+                    'error' => 'Contract ID must be a positive integer'
+                ], 400);
+            }
+
+            Log::info('Fetching remarks for contract', [
+                'contract_id' => $contractId
+            ]);
+
+            // Get all phone collections for this contract
+            $phoneCollections = TblCcPhoneCollection::where('contractId', $contractId)
+                ->select('phoneCollectionId', 'contractId', 'customerFullName', 'status', 'totalAttempts')
+                ->get();
+
+            if ($phoneCollections->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No phone collections found for this contract',
+                    'error' => 'The specified contract has no phone collection records'
+                ], 404);
+            }
+
+            $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
+
+            // Get all call details with remarks for these phone collections
+            $callDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection'])
+                ->whereIn('phoneCollectionId', $phoneCollectionIds)
+                ->where(function($query) {
+                    // Only get records that have remarks
+                    $query->whereNotNull('remark')
+                        ->orWhereNotNull('standardRemarkContent')
+                        ->orWhereNotNull('standardRemarkId');
+                })
+                ->orderBy('createdAt', 'desc')
+                ->get();
+
+            // Transform data for response
+            $transformedRemarks = $callDetails->map(function ($detail) {
+                return [
+                    'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
+                    'phoneCollectionId' => $detail->phoneCollectionId,
+                    'contractId' => $detail->phoneCollection->contractId ?? null,
+                    'customerFullName' => $detail->phoneCollection->customerFullName ?? null,
+                    'remark' => $detail->remark,
+                    'standardRemarkContent' => $detail->standardRemarkContent,
+                    'standardRemarkId' => $detail->standardRemarkId,
+                    'standardRemark' => $detail->standardRemark ? [
+                        'remarkId' => $detail->standardRemark->remarkId,
+                        'remarkContent' => $detail->standardRemark->remarkContent,
+                        'contactType' => $detail->standardRemark->contactType,
+                    ] : null,
+                    'contactType' => $detail->contactType,
+                    'callStatus' => $detail->callStatus,
+                    'contactPhoneNumer' => $detail->contactPhoneNumer,
+                    'createdAt' => $detail->createdAt?->format('Y-m-d H:i:s'),
+                    'createdBy' => $detail->createdBy,
+                    'creator' => $detail->creator ? [
+                        'id' => $detail->creator->id,
+                        'username' => $detail->creator->username,
+                        'userFullName' => $detail->creator->userFullName,
+                    ] : null,
+                ];
+            });
+
+            // Group remarks by phoneCollectionId
+            $remarksByPhoneCollection = $transformedRemarks->groupBy('phoneCollectionId');
+
+            Log::info('Contract remarks fetched successfully', [
+                'contract_id' => $contractId,
+                'phone_collections_count' => $phoneCollections->count(),
+                'total_remarks' => $callDetails->count()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Contract remarks retrieved successfully',
+                'data' => [
+                    'contractId' => $contractId,
+                    'phoneCollections' => $phoneCollections->map(function($pc) use ($remarksByPhoneCollection) {
+                        return [
+                            'phoneCollectionId' => $pc->phoneCollectionId,
+                            'customerFullName' => $pc->customerFullName,
+                            'status' => $pc->status,
+                            'totalAttempts' => $pc->totalAttempts,
+                            'remarks' => $remarksByPhoneCollection->get($pc->phoneCollectionId, collect())->values(),
+                            'remarkCount' => $remarksByPhoneCollection->get($pc->phoneCollectionId, collect())->count(),
+                        ];
+                    }),
+                    'allRemarks' => $transformedRemarks->values(), // Flat list of all remarks
+                    'summary' => [
+                        'totalPhoneCollections' => $phoneCollections->count(),
+                        'totalRemarks' => $callDetails->count(),
+                        'remarksWithStandardRemark' => $callDetails->whereNotNull('standardRemarkId')->count(),
+                        'remarksWithCustomRemark' => $callDetails->whereNotNull('remark')->count(),
+                        'byContactType' => $callDetails->groupBy('contactType')->map->count(),
+                        'byCallStatus' => $callDetails->groupBy('callStatus')->map->count(),
+                    ]
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to fetch contract remarks', [
+                'contract_id' => $contractId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve contract remarks',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
 }

@@ -158,6 +158,8 @@ Route::prefix('cc-phone-collection-details')->group(function () {
     Route::get('/recent', [TblCcPhoneCollectionDetailController::class, 'getRecent']);
 });
 
+Route::get('/cc-phone-collection-details/contract/{contractId}/remarks', [App\Http\Controllers\API\TblCcPhoneCollectionDetailController::class, 'getRemarksByContract']);
+
 // Image Upload API Routes (NEW)
 Route::prefix('images')->group(function () {
     // Upload multiple images
