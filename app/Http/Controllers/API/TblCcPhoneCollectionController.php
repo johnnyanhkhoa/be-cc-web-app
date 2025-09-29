@@ -242,4 +242,114 @@ class TblCcPhoneCollectionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Mark phone collection as completed
+     *
+     * @param Request $request
+     * @param int $phoneCollectionId
+     * @return JsonResponse
+     */
+    public function markAsCompleted(Request $request, int $phoneCollectionId): JsonResponse
+    {
+        try {
+            // Validate phoneCollectionId
+            if ($phoneCollectionId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid phone collection ID',
+                    'error' => 'Phone collection ID must be a positive integer'
+                ], 400);
+            }
+
+            Log::info('Marking phone collection as completed', [
+                'phone_collection_id' => $phoneCollectionId
+            ]);
+
+            // Find phone collection record
+            $phoneCollection = TblCcPhoneCollection::find($phoneCollectionId);
+
+            if (!$phoneCollection) {
+                Log::warning('Phone collection not found', [
+                    'phone_collection_id' => $phoneCollectionId
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phone collection not found',
+                    'error' => 'The specified phone collection does not exist'
+                ], 404);
+            }
+
+            // Check if already completed
+            if ($phoneCollection->status === 'completed') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Phone collection is already completed',
+                    'data' => [
+                        'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                        'status' => $phoneCollection->status,
+                        'contractId' => $phoneCollection->contractId,
+                        'customerFullName' => $phoneCollection->customerFullName,
+                        'updatedAt' => $phoneCollection->updatedAt?->format('Y-m-d H:i:s'),
+                    ]
+                ], 200);
+            }
+
+            // Get current user ID (TODO: replace with actual authenticated user)
+            $updatedBy = $request->input('updatedBy', 1);
+
+            // Store previous status for logging
+            $previousStatus = $phoneCollection->status;
+
+            // Update status to completed
+            $phoneCollection->update([
+                'status' => 'completed',
+                'updatedBy' => $updatedBy,
+                'updatedAt' => now(),
+            ]);
+
+            Log::info('Phone collection marked as completed successfully', [
+                'phone_collection_id' => $phoneCollectionId,
+                'previous_status' => $previousStatus,
+                'new_status' => 'completed',
+                'updated_by' => $updatedBy,
+                'contract_id' => $phoneCollection->contractId,
+                'customer_name' => $phoneCollection->customerFullName,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Phone collection marked as completed successfully',
+                'data' => [
+                    'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                    'status' => $phoneCollection->status,
+                    'previousStatus' => $previousStatus,
+                    'contractId' => $phoneCollection->contractId,
+                    'contractNo' => $phoneCollection->contractNo,
+                    'customerId' => $phoneCollection->customerId,
+                    'customerFullName' => $phoneCollection->customerFullName,
+                    'totalAmount' => $phoneCollection->totalAmount,
+                    'amountUnpaid' => $phoneCollection->amountUnpaid,
+                    'totalAttempts' => $phoneCollection->totalAttempts,
+                    'lastAttemptAt' => $phoneCollection->lastAttemptAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $phoneCollection->updatedAt?->format('Y-m-d H:i:s'),
+                    'updatedBy' => $phoneCollection->updatedBy,
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to mark phone collection as completed', [
+                'phone_collection_id' => $phoneCollectionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to mark phone collection as completed',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
 }

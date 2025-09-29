@@ -86,6 +86,9 @@ Route::prefix('call-assignments')->group(function () {
 Route::prefix('cc-phone-collections')->group(function () {
     // Get phone collection records with filtering by status and assignedTo
     Route::get('/', [TblCcPhoneCollectionController::class, 'index']);
+
+    // Mark phone collection as completed
+    Route::patch('/{phoneCollectionId}/complete', [TblCcPhoneCollectionController::class, 'markAsCompleted']);
 });
 
 Route::prefix('cc-reasons')->group(function () {
