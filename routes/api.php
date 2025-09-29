@@ -190,6 +190,14 @@ Route::prefix('payment-guidelines')->group(function () {
     Route::get('/{pmtId}', [PMTGuidelineController::class, 'getById']);
 });
 
+Route::prefix('voice-call')->group(function () {
+    // Initiate voice call
+    Route::post('/initiate', [App\Http\Controllers\API\VoiceCallController::class, 'initiateCall']);
+
+    // Get call status (optional)
+    Route::get('/status/{callId}', [App\Http\Controllers\API\VoiceCallController::class, 'getCallStatus']);
+});
+
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
 //     Route::prefix('auth')->group(function () {
