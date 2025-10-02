@@ -196,12 +196,16 @@ Route::prefix('payment-guidelines')->group(function () {
     Route::get('/{pmtId}', [PMTGuidelineController::class, 'getById']);
 });
 
+// Voice Call (Asterisk Integration) Routes
 Route::prefix('voice-call')->group(function () {
     // Initiate voice call
     Route::post('/initiate', [App\Http\Controllers\API\VoiceCallController::class, 'initiateCall']);
 
     // Get call status (optional)
     Route::get('/status/{callId}', [App\Http\Controllers\API\VoiceCallController::class, 'getCallStatus']);
+
+    // NEW: Get call logs
+    Route::get('/logs', [App\Http\Controllers\API\VoiceCallController::class, 'getCallLogs']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)
