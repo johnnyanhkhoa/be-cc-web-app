@@ -253,4 +253,124 @@ class AuthController extends Controller
             ], $e->getCode() ?: 400);
         }
     }
+
+    /**
+     * Check if user is allowed to access a specific team
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function checkAllow(Request $request): JsonResponse
+    {
+        try {
+            // Validate request
+            $request->validate([
+                'teamName' => ['required', 'string', 'max:255'],
+            ]);
+
+            $teamName = $request->input('teamName');
+
+            // Get access token from Authorization header
+            $authHeader = $request->header('Authorization');
+
+            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access token is required',
+                    'error' => 'Missing or invalid Authorization header'
+                ], 401);
+            }
+
+            $accessToken = substr($authHeader, 7); // Remove "Bearer " prefix
+
+            Log::info('Check-allow request received', [
+                'team_name' => $teamName
+            ]);
+
+            // Step 1: Get all teams
+            $teamsResponse = $this->authService->getAllTeams($accessToken);
+
+            if (!isset($teamsResponse['data']['data'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch teams',
+                    'error' => 'Invalid teams response format'
+                ], 500);
+            }
+
+            $teams = $teamsResponse['data']['data'];
+
+            // Step 2: Find team by name (case-insensitive)
+            $foundTeam = null;
+            foreach ($teams as $team) {
+                if (strcasecmp($team['name'], $teamName) === 0) {
+                    $foundTeam = $team;
+                    break;
+                }
+            }
+
+            if (!$foundTeam) {
+                Log::warning('Team not found', [
+                    'team_name' => $teamName,
+                    'available_teams' => array_column($teams, 'name')
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Team not found',
+                    'error' => "No team found with name: {$teamName}",
+                    'availableTeams' => array_map(function($team) {
+                        return [
+                            'team_id' => $team['team_id'],
+                            'name' => $team['name'],
+                            'description' => $team['description']
+                        ];
+                    }, $teams)
+                ], 404);
+            }
+
+            $teamId = $foundTeam['team_id'];
+
+            Log::info('Team found', [
+                'team_name' => $teamName,
+                'team_id' => $teamId
+            ]);
+
+            // Step 3: Check permission for this team
+            $permissionResponse = $this->authService->checkTeamPermission($accessToken, $teamId);
+
+            Log::info('Permission check completed', [
+                'team_name' => $teamName,
+                'team_id' => $teamId,
+                'response' => $permissionResponse
+            ]);
+
+            // Return exact response from is-allow API
+            // Determine status code based on response
+            $statusCode = 200;
+            if (isset($permissionResponse['status']) && $permissionResponse['status'] == 0) {
+                $statusCode = 403;
+            }
+
+            return response()->json($permissionResponse, $statusCode);
+
+        } catch (Exception $e) {
+            Log::error('Check-allow failed', [
+                'team_name' => $request->input('teamName'),
+                'error' => $e->getMessage(),
+                'code' => $e->getCode()
+            ]);
+
+            $statusCode = $e->getCode();
+            if ($statusCode < 100 || $statusCode >= 600) {
+                $statusCode = 500;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check team permission',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], $statusCode);
+        }
+    }
 }

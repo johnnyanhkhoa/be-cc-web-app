@@ -223,4 +223,98 @@ class AuthService
             throw $e;
         }
     }
+
+    /**
+     * Get all teams
+     *
+     * @param string $accessToken
+     * @return array
+     * @throws Exception
+     */
+    public function getAllTeams(string $accessToken): array
+    {
+        try {
+            Log::info('Fetching all teams from external API');
+
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->get(self::BASE_URL . '/api/v1/teams');
+
+            Log::info('Teams API response', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                if (isset($data['status']) && $data['status'] == 1 && isset($data['data']['data'])) {
+                    return $data;
+                }
+
+                throw new Exception('Invalid response format from teams endpoint');
+            }
+
+            throw new Exception('Failed to fetch teams - Status: ' . $response->status(), $response->status());
+
+        } catch (Exception $e) {
+            Log::error('Failed to fetch teams', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Check if user is allowed to access a team
+     *
+     * @param string $accessToken
+     * @param int $teamId
+     * @return array
+     * @throws Exception
+     */
+    public function checkTeamPermission(string $accessToken, int $teamId): array
+    {
+        try {
+            Log::info('Checking team permission', [
+                'team_id' => $teamId
+            ]);
+
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'X-Team-Id' => (string)$teamId,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->get(self::BASE_URL . '/api/v1/is-allow');
+
+            Log::info('is-allow API response', [
+                'status' => $response->status(),
+                'team_id' => $teamId,
+                'body' => $response->body()
+            ]);
+
+            if ($response->successful() || $response->status() === 403) {
+                // Return response as-is (both success and permission denied)
+                return $response->json();
+            }
+
+            throw new Exception('Failed to check permission - Status: ' . $response->status(), $response->status());
+
+        } catch (Exception $e) {
+            Log::error('Failed to check team permission', [
+                'team_id' => $teamId,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
+        }
+    }
 }
