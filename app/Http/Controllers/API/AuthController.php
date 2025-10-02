@@ -40,12 +40,14 @@ class AuthController extends Controller
                 'token_type' => $authResponse['token_type'] ?? 'unknown'
             ]);
 
-            // Step 2: Get current user info using access token
-            $userData = $this->authService->getUserInfo($authResponse['access_token']);
-            $user = $userData['user'];
+            // Step 2: Get current user info using access token (v2 API)
+            $userResponse = $this->authService->getUserInfo($authResponse['access_token']);
+
+            // Extract user data from v2 response format
+            $user = $userResponse['data']; // v2 format: data directly contains user info
             $authUserId = $user['user_id'];
 
-            Log::info('User info retrieved', [
+            Log::info('User info retrieved from v2 API', [
                 'user_id' => $authUserId,
                 'username' => $user['username'] ?? 'unknown',
                 'email' => $user['email'] ?? 'unknown'
@@ -57,8 +59,8 @@ class AuthController extends Controller
                 [
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'userFullName' => $user['user_full_name'], // Fixed mapping
-                    'isActive' => true, // Fixed field name
+                    'userFullName' => $user['user_full_name'],
+                    'isActive' => true,
                 ]
             );
 
@@ -86,12 +88,15 @@ class AuthController extends Controller
                     ],
                     'external_user' => [
                         'user_id' => $user['user_id'],
+                        'old_user_id' => $user['old_user_id'],
                         'username' => $user['username'],
-                        'email' => $user['email'],
-                        'full_name' => $user['user_full_name'],
+                        'user_full_name' => $user['user_full_name'],
                         'emp_no' => $user['emp_no'],
-                        'roles' => $userData['roles'] ?? [],
-                        'permissions' => $userData['permissions'] ?? [],
+                        'email' => $user['email'],
+                        'phone_no' => $user['phone_no'],
+                        'ext_no' => $user['ext_no'],
+                        'created_at' => $user['created_at'],
+                        'updated_at' => $user['updated_at'],
                     ],
                     'auth' => [
                         'token_type' => $authResponse['token_type'],
@@ -208,9 +213,9 @@ class AuthController extends Controller
 
             $accessToken = substr($authHeader, 7); // Remove "Bearer " prefix
 
-            // Get current user info from external API
-            $userData = $this->authService->getUserInfo($accessToken);
-            $user = $userData['user'];
+            // Get current user info from external API v2
+            $userResponse = $this->authService->getUserInfo($accessToken);
+            $user = $userResponse['data'];
 
             // Try to find local user
             $localUser = User::where('authUserId', $user['user_id'])->first();
@@ -230,12 +235,15 @@ class AuthController extends Controller
                     ] : null,
                     'external_user' => [
                         'user_id' => $user['user_id'],
+                        'old_user_id' => $user['old_user_id'],
                         'username' => $user['username'],
-                        'email' => $user['email'],
-                        'full_name' => $user['user_full_name'],
+                        'user_full_name' => $user['user_full_name'],
                         'emp_no' => $user['emp_no'],
-                        'roles' => $userData['roles'] ?? [],
-                        'permissions' => $userData['permissions'] ?? [],
+                        'email' => $user['email'],
+                        'phone_no' => $user['phone_no'],
+                        'ext_no' => $user['ext_no'],
+                        'created_at' => $user['created_at'],
+                        'updated_at' => $user['updated_at'],
                     ]
                 ]
             ], 200);

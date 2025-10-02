@@ -87,7 +87,7 @@ class AuthService
     }
 
     /**
-     * Get current user info using access token
+     * Get current user info using access token (API v2)
      *
      * @param string $accessToken
      * @return array
@@ -96,21 +96,20 @@ class AuthService
     public function getUserInfo(string $accessToken): array
     {
         try {
-            Log::info('Attempting to get current user info', [
-                'endpoint' => self::BASE_URL . '/api/v1/current-user',
+            Log::info('Attempting to get current user info from v2 API', [
+                'endpoint' => self::BASE_URL . '/api/v2/current-user',
                 'token_preview' => substr($accessToken, 0, 20) . '...'
             ]);
 
             $response = Http::timeout(30)
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $accessToken,
-                    'X-Team-Id' => '4',  // Fixed team ID as required
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ])
-                ->get(self::BASE_URL . '/api/v1/current-user');
+                ->get(self::BASE_URL . '/api/v2/current-user');
 
-            Log::info('Current user API response', [
+            Log::info('Current user API v2 response', [
                 'status' => $response->status(),
                 'body' => $response->body()
             ]);
@@ -118,18 +117,18 @@ class AuthService
             if ($response->successful()) {
                 $data = $response->json();
 
-                // Validate response structure
-                if (isset($data['status']) && $data['status'] == 1 && isset($data['data']['user'])) {
-                    return $data['data']; // Return the data object containing user, roles, permissions
+                // Validate response structure for v2
+                if (isset($data['status']) && $data['status'] == 1 && isset($data['data'])) {
+                    return $data; // Return full response including status, data, message
                 }
 
-                throw new Exception('Invalid response format from current-user endpoint');
+                throw new Exception('Invalid response format from current-user v2 endpoint');
             }
 
             throw new Exception('Failed to get user info - Status: ' . $response->status() . ' Body: ' . $response->body(), $response->status());
 
         } catch (Exception $e) {
-            Log::error('Failed to get current user info', [
+            Log::error('Failed to get current user info from v2', [
                 'error' => $e->getMessage(),
                 'code' => $e->getCode()
             ]);
