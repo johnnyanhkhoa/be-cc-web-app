@@ -316,4 +316,57 @@ class AuthService
             throw $e;
         }
     }
+
+    /**
+     * Get user roles and permissions by team
+     *
+     * @param string $accessToken
+     * @param int $teamId
+     * @return array
+     * @throws Exception
+     */
+    public function getUserRolesByTeam(string $accessToken, int $teamId): array
+    {
+        try {
+            Log::info('Getting user roles and permissions', [
+                'team_id' => $teamId
+            ]);
+
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $accessToken,
+                    'X-Team-Id' => (string)$teamId,
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->get(self::BASE_URL . '/api/v1/current-user');
+
+            Log::info('User roles API response', [
+                'status' => $response->status(),
+                'team_id' => $teamId,
+                'body' => $response->body()
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                // Validate response structure
+                if (isset($data['status']) && $data['status'] == 1 && isset($data['data'])) {
+                    return $data;
+                }
+
+                throw new Exception('Invalid response format from current-user endpoint');
+            }
+
+            throw new Exception('Failed to get user roles - Status: ' . $response->status(), $response->status());
+
+        } catch (Exception $e) {
+            Log::error('Failed to get user roles', [
+                'team_id' => $teamId,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+    }
 }

@@ -384,4 +384,86 @@ class AuthController extends Controller
             ], $statusCode);
         }
     }
+
+    /**
+     * Check user roles and permissions for a specific team
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function checkRole(Request $request): JsonResponse
+    {
+        try {
+            // Validate request
+            $request->validate([
+                'teamId' => ['required', 'integer', 'min:1'],
+            ]);
+
+            $teamId = $request->input('teamId');
+
+            // Get access token from Authorization header
+            $authHeader = $request->header('Authorization');
+
+            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access token is required',
+                    'error' => 'Missing or invalid Authorization header'
+                ], 401);
+            }
+
+            $accessToken = substr($authHeader, 7); // Remove "Bearer " prefix
+
+            Log::info('Check role request received', [
+                'team_id' => $teamId
+            ]);
+
+            // Get user roles and permissions from external API
+            $rolesResponse = $this->authService->getUserRolesByTeam($accessToken, $teamId);
+
+            if (!isset($rolesResponse['data'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch roles',
+                    'error' => 'Invalid response format'
+                ], 500);
+            }
+
+            $data = $rolesResponse['data'];
+
+            Log::info('User roles retrieved successfully', [
+                'team_id' => $teamId,
+                'roles' => $data['roles'] ?? [],
+                'permissions' => $data['permissions'] ?? []
+            ]);
+
+            // Return response without "user" field
+            return response()->json([
+                'status' => $rolesResponse['status'],
+                'data' => [
+                    'roles' => $data['roles'] ?? [],
+                    'permissions' => $data['permissions'] ?? []
+                ],
+                'message' => $rolesResponse['message'] ?? ''
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Check role failed', [
+                'team_id' => $request->input('teamId'),
+                'error' => $e->getMessage(),
+                'code' => $e->getCode()
+            ]);
+
+            $statusCode = $e->getCode();
+            if ($statusCode < 100 || $statusCode >= 600) {
+                $statusCode = 500;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check user roles',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], $statusCode);
+        }
+    }
 }

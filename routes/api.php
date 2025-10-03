@@ -27,9 +27,10 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
-
-    // Check team permission
     Route::post('check-allow', [AuthController::class, 'checkAllow']);
+
+    // NEW: Check user roles and permissions by team
+    Route::post('check-role', [AuthController::class, 'checkRole']);
 });
 
 // Duty Roster Management Routes
