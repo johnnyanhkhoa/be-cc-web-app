@@ -396,10 +396,10 @@ class AuthController extends Controller
         try {
             // Validate request
             $request->validate([
-                'teamId' => ['required', 'integer', 'min:1'],
+                'teamName' => ['required', 'string', 'max:255'],
             ]);
 
-            $teamId = $request->input('teamId');
+            $teamName = $request->input('teamName');
 
             // Get access token from Authorization header
             $authHeader = $request->header('Authorization');
@@ -415,10 +415,59 @@ class AuthController extends Controller
             $accessToken = substr($authHeader, 7); // Remove "Bearer " prefix
 
             Log::info('Check role request received', [
+                'team_name' => $teamName
+            ]);
+
+            // Step 1: Get all teams to find teamId by teamName
+            $teamsResponse = $this->authService->getAllTeams($accessToken);
+
+            if (!isset($teamsResponse['data']['data'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch teams',
+                    'error' => 'Invalid teams response format'
+                ], 500);
+            }
+
+            $teams = $teamsResponse['data']['data'];
+
+            // Step 2: Find team by name (case-insensitive)
+            $foundTeam = null;
+            foreach ($teams as $team) {
+                if (strcasecmp($team['name'], $teamName) === 0) {
+                    $foundTeam = $team;
+                    break;
+                }
+            }
+
+            if (!$foundTeam) {
+                Log::warning('Team not found for role check', [
+                    'team_name' => $teamName,
+                    'available_teams' => array_column($teams, 'name')
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Team not found',
+                    'error' => "No team found with name: {$teamName}",
+                    'availableTeams' => array_map(function($team) {
+                        return [
+                            'team_id' => $team['team_id'],
+                            'name' => $team['name'],
+                            'description' => $team['description']
+                        ];
+                    }, $teams)
+                ], 404);
+            }
+
+            $teamId = $foundTeam['team_id'];
+
+            Log::info('Team found for role check', [
+                'team_name' => $teamName,
                 'team_id' => $teamId
             ]);
 
-            // Get user roles and permissions from external API
+            // Step 3: Get user roles and permissions for this team
             $rolesResponse = $this->authService->getUserRolesByTeam($accessToken, $teamId);
 
             if (!isset($rolesResponse['data'])) {
@@ -432,6 +481,7 @@ class AuthController extends Controller
             $data = $rolesResponse['data'];
 
             Log::info('User roles retrieved successfully', [
+                'team_name' => $teamName,
                 'team_id' => $teamId,
                 'roles' => $data['roles'] ?? [],
                 'permissions' => $data['permissions'] ?? []
@@ -449,7 +499,7 @@ class AuthController extends Controller
 
         } catch (Exception $e) {
             Log::error('Check role failed', [
-                'team_id' => $request->input('teamId'),
+                'team_name' => $request->input('teamName'),
                 'error' => $e->getMessage(),
                 'code' => $e->getCode()
             ]);
