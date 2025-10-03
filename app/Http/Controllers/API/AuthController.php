@@ -60,6 +60,7 @@ class AuthController extends Controller
                     'email' => $user['email'],
                     'username' => $user['username'],
                     'userFullName' => $user['user_full_name'],
+                    'extensionNo' => $user['ext_no'], // NEW: Save extension number
                     'isActive' => true,
                 ]
             );
@@ -83,6 +84,7 @@ class AuthController extends Controller
                         'email' => $localUser->email,
                         'username' => $localUser->username,
                         'userFullName' => $localUser->userFullName,
+                        'extensionNo' => $localUser->extensionNo, // NEW
                         'isActive' => $localUser->isActive,
                         'lastLoginAt' => $localUser->lastLoginAt,
                     ],
@@ -94,7 +96,7 @@ class AuthController extends Controller
                         'emp_no' => $user['emp_no'],
                         'email' => $user['email'],
                         'phone_no' => $user['phone_no'],
-                        'ext_no' => $user['ext_no'],
+                        'ext_no' => $user['ext_no'], // Already there
                         'created_at' => $user['created_at'],
                         'updated_at' => $user['updated_at'],
                     ],
@@ -230,6 +232,7 @@ class AuthController extends Controller
                         'email' => $localUser->email,
                         'username' => $localUser->username,
                         'userFullName' => $localUser->userFullName,
+                        'extensionNo' => $localUser->extensionNo, // NEW
                         'isActive' => $localUser->isActive,
                         'lastLoginAt' => $localUser->lastLoginAt,
                     ] : null,

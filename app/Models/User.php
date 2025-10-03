@@ -21,6 +21,7 @@ class User extends Authenticatable
         'email',
         'username',
         'userFullName',
+        'extensionNo',
         'isActive',
         'lastLoginAt',
         'createdBy',
