@@ -34,6 +34,7 @@ class TblCcUploadImage extends Model
         'fileType',
         'localUrl',
         'googleUrl',
+        'logId',
         'createdBy',
         'updatedBy',
         'deletedBy',

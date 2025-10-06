@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use App\Models\TblCcUploadImage;
 
 class ImageUploadController extends Controller
 {
@@ -19,7 +20,7 @@ class ImageUploadController extends Controller
     }
 
     /**
-     * Upload multiple images
+     * Upload images to Google Drive
      *
      * @param Request $request
      * @return JsonResponse
@@ -29,46 +30,57 @@ class ImageUploadController extends Controller
         try {
             $request->validate([
                 'images' => ['required', 'array', 'min:1', 'max:10'],
-                'images.*' => ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'], // 5MB max
-                'createdBy' => ['required', 'integer'],
+                'images.*' => ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:10240'], // 10MB max
+                'userId' => ['required', 'integer'],
+                'username' => ['required', 'string'],
+                'description' => ['nullable', 'string'],
             ]);
 
             $files = $request->file('images');
-            $createdBy = $request->input('createdBy');
+            $userId = $request->input('userId');
+            $username = $request->input('username');
+            $description = $request->input('description');
 
-            Log::info('Starting image upload', [
+            Log::info('Starting image upload to Google Drive', [
                 'file_count' => count($files),
-                'created_by' => $createdBy
+                'user_id' => $userId,
+                'username' => $username
             ]);
 
-            // Upload images using service
-            $uploadedImages = $this->imageUploadService->uploadImages($files, $createdBy);
+            $uploadedImages = [];
 
-            // Transform response
-            $responseData = collect($uploadedImages)->map(function ($image) {
-                return [
-                    'uploadImageId' => $image->uploadImageId,
-                    'fileName' => $image->fileName,
-                    'localUrl' => $image->localUrl,
-                    'fullLocalUrl' => $image->getFullLocalUrl(),
-                    'googleUrl' => $image->googleUrl,
-                    'fileType' => $image->fileType,
-                    'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+            foreach ($files as $file) {
+                $uploadImage = $this->imageUploadService->uploadImageToGoogleDrive(
+                    $file,
+                    $userId,
+                    $username,
+                    $description
+                );
+
+                $uploadedImages[] = [
+                    'uploadImageId' => $uploadImage->uploadImageId,
+                    'fileName' => $uploadImage->fileName,
+                    'fileType' => $uploadImage->fileType,
+                    'localUrl' => $uploadImage->localUrl,
+                    'googleUrl' => $uploadImage->googleUrl, // null initially
+                    'status' => 'processing', // Indicate Google Drive upload is in progress
+                    'createdAt' => $uploadImage->createdAt?->format('Y-m-d H:i:s'),
                 ];
-            });
+            }
 
             Log::info('Images uploaded successfully', [
                 'uploaded_count' => count($uploadedImages),
-                'image_ids' => $responseData->pluck('uploadImageId')->toArray()
+                'image_ids' => array_column($uploadedImages, 'uploadImageId')
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Images uploaded successfully',
+                'message' => 'Images uploaded to local storage and queued for Google Drive',
                 'data' => [
-                    'images' => $responseData,
-                    'uploadImageIds' => $responseData->pluck('uploadImageId')->toArray(),
-                    'totalUploaded' => count($uploadedImages)
+                    'images' => $uploadedImages,
+                    'uploadImageIds' => array_column($uploadedImages, 'uploadImageId'),
+                    'totalUploaded' => count($uploadedImages),
+                    'note' => 'Google Drive URLs will be available shortly via callback'
                 ]
             ], 201);
 
@@ -87,7 +99,85 @@ class ImageUploadController extends Controller
     }
 
     /**
-     * Get image details by IDs
+     * Callback endpoint for Google Image API
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function uploadCallback(Request $request): JsonResponse
+    {
+        try {
+            Log::info('=== CALLBACK RECEIVED ===', [
+                'full_request' => $request->all(),
+                'headers' => $request->headers->all(),
+            ]);
+
+            $statusCode = $request->input('status_code');
+            $data = $request->input('data');
+            $logId = $data['log_id'] ?? null;
+
+            Log::info('Processing callback', [
+                'status_code' => $statusCode,
+                'log_id' => $logId,
+                'google_url' => $data['url'] ?? null,
+                'file_id' => $data['fileId'] ?? null,
+            ]);
+
+            if ($statusCode != 1) {
+                Log::error('Callback indicated failure', [
+                    'status_message' => $request->input('status_message'),
+                ]);
+                return response()->json(['success' => false], 200);
+            }
+
+            if (!$logId) {
+                Log::error('Missing log_id in callback', ['data' => $data]);
+                return response()->json(['success' => false], 200);
+            }
+
+            // Check if record exists BEFORE update
+            $existing = TblCcUploadImage::where('logId', (string)$logId)->first();
+
+            Log::info('Looking for upload record', [
+                'log_id' => $logId,
+                'found' => $existing ? 'YES' : 'NO',
+                'record' => $existing ? $existing->toArray() : null
+            ]);
+
+            if (!$existing) {
+                Log::error('Record not found for log_id', [
+                    'log_id' => $logId,
+                    'all_records' => TblCcUploadImage::whereNull('googleUrl')->get()->toArray()
+                ]);
+                return response()->json(['success' => false], 200);
+            }
+
+            // Update
+            $uploadImage = $this->imageUploadService->updateGoogleUrl(
+                $logId,
+                $data['url'],
+                $data['fileId']
+            );
+
+            Log::info('=== CALLBACK PROCESSED ===', [
+                'success' => true,
+                'upload_image_id' => $uploadImage->uploadImageId ?? null,
+            ]);
+
+            return response()->json(['success' => true], 200);
+
+        } catch (Exception $e) {
+            Log::error('=== CALLBACK ERROR ===', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['success' => false], 200);
+        }
+    }
+
+    /**
+     * Get images by IDs
      *
      * @param Request $request
      * @return JsonResponse

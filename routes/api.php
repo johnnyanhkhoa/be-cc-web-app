@@ -167,10 +167,13 @@ Route::prefix('cc-phone-collection-details')->group(function () {
 
 Route::get('/cc-phone-collection-details/contract/{contractId}/remarks', [App\Http\Controllers\API\TblCcPhoneCollectionDetailController::class, 'getRemarksByContract']);
 
-// Image Upload API Routes (NEW)
+// Image Upload API Routes
 Route::prefix('images')->group(function () {
-    // Upload multiple images
+    // Upload images to Google Drive
     Route::post('/upload', [App\Http\Controllers\API\ImageUploadController::class, 'uploadImages']);
+
+    // Callback from Google Image API (IMPORTANT: Must be public)
+    Route::post('/upload-callback', [App\Http\Controllers\API\ImageUploadController::class, 'uploadCallback']);
 
     // Get images by IDs
     Route::post('/by-ids', [App\Http\Controllers\API\ImageUploadController::class, 'getImagesByIds']);

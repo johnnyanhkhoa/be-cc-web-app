@@ -3,99 +3,156 @@
 namespace App\Services;
 
 use App\Models\TblCcUploadImage;
-use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Illuminate\Http\UploadedFile;
 use Exception;
 
 class ImageUploadService
 {
-    /**
-     * Upload images and save to database
-     *
-     * @param array $files
-     * @param int $createdBy
-     * @return array
-     */
-    public function uploadImages(array $files, int $createdBy): array
-    {
-        $uploadedImages = [];
-
-        foreach ($files as $file) {
-            try {
-                $uploadedImage = $this->uploadSingleImage($file, $createdBy);
-                $uploadedImages[] = $uploadedImage;
-            } catch (Exception $e) {
-                Log::error('Failed to upload single image', [
-                    'error' => $e->getMessage(),
-                    'file_name' => $file->getClientOriginalName()
-                ]);
-                throw $e;
-            }
-        }
-
-        return $uploadedImages;
-    }
+    private const GOOGLE_IMAGE_API_URL = 'https://google-image.mmapp.xyz/api/v2/upload-image';
+    private const BEARER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.u8N4a0w3b9XyZkLmPqRsT7V2hG';
+    private const DRIVE_NAME = 'Call-Collection';
+    private const MODULE_NAME = 'phone_collection';
+    private const FOLDER = 'uploads/documents';
 
     /**
-     * Upload single image
+     * Upload image to Google Drive via external API
      *
      * @param UploadedFile $file
-     * @param int $createdBy
+     * @param int $userId
+     * @param string $username
+     * @param string|null $description
      * @return TblCcUploadImage
-     */
-    public function uploadSingleImage(UploadedFile $file, int $createdBy): TblCcUploadImage
-    {
-        // Validate file
-        $this->validateImage($file);
-
-        // Generate unique filename
-        $originalName = $file->getClientOriginalName();
-        $extension = $file->getClientOriginalExtension();
-        $fileName = time() . '_' . Str::random(10) . '.' . $extension;
-
-        // Upload to storage/app/public/cc-images
-        $path = $file->storeAs('cc-images', $fileName, 'public');
-
-        // Create local URL
-        $localUrl = '/storage/' . $path;
-
-        // Save to database
-        $uploadImage = TblCcUploadImage::create([
-            'fileName' => $originalName,
-            'fileType' => $file->getMimeType(),
-            'localUrl' => $localUrl,
-            'googleUrl' => null, // Để trống như yêu cầu
-            'createdBy' => $createdBy,
-        ]);
-
-        Log::info('Image uploaded successfully', [
-            'upload_image_id' => $uploadImage->uploadImageId,
-            'file_name' => $originalName,
-            'local_url' => $localUrl
-        ]);
-
-        return $uploadImage;
-    }
-
-    /**
-     * Validate uploaded image
-     *
-     * @param UploadedFile $file
      * @throws Exception
      */
-    private function validateImage(UploadedFile $file): void
-    {
-        // Check file size (max 5MB)
-        if ($file->getSize() > 5 * 1024 * 1024) {
-            throw new Exception('File size must not exceed 5MB');
-        }
+    public function uploadImageToGoogleDrive(
+        UploadedFile $file,
+        int $userId,
+        string $username,
+        ?string $description = null
+    ): TblCcUploadImage {
+        try {
+            // Generate callback URL
+            $callbackUrl = config('app.url') . '/api/images/upload-callback';
 
-        // Check file type
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if (!in_array($file->getMimeType(), $allowedTypes)) {
-            throw new Exception('File must be an image (JPEG, PNG, GIF, WEBP)');
+            Log::info('Uploading image to Google Drive', [
+                'filename' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'user_id' => $userId,
+                'callback_url' => $callbackUrl
+            ]);
+
+            // Prepare form data
+            $response = Http::timeout(60)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . self::BEARER_TOKEN,
+                ])
+                ->attach('upload_file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+                ->post(self::GOOGLE_IMAGE_API_URL, [
+                    'drive_name' => self::DRIVE_NAME,
+                    'username' => $username,
+                    'user_id' => (string)$userId,
+                    'module_name' => self::MODULE_NAME,
+                    'folder' => self::FOLDER,
+                    'description' => $description ?? 'Phone collection image upload',
+                    'resize' => 'false',
+                    'call_back_url' => $callbackUrl,
+                ]);
+
+            Log::info('Google Image API response', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            if (!$response->successful()) {
+                throw new Exception('Failed to upload to Google Image API: ' . $response->body(), $response->status());
+            }
+
+            $responseData = $response->json();
+
+            if (!isset($responseData['status_code']) || $responseData['status_code'] != 1) {
+                throw new Exception('Google Image API returned error: ' . ($responseData['status_message'] ?? 'Unknown error'));
+            }
+
+            $data = $responseData['data'];
+
+            // Save to database with local URL
+            $uploadImage = TblCcUploadImage::create([
+                'fileName' => $data['filename'],
+                'fileType' => $file->getClientOriginalExtension(),
+                'localUrl' => $data['url'], // Local URL from Google Image API
+                'googleUrl' => null, // Will be updated via callback
+                'logId' => (string)$data['log_id'],
+                'createdBy' => $userId,
+                'createdAt' => now(),
+            ]);
+
+            Log::info('Image upload record created', [
+                'upload_image_id' => $uploadImage->uploadImageId,
+                'log_id' => $uploadImage->logId,
+                'filename' => $uploadImage->fileName,
+                'local_url' => $uploadImage->localUrl,
+                'log_id' => $data['log_id'] ?? null
+            ]);
+
+            return $uploadImage;
+
+        } catch (Exception $e) {
+            Log::error('Failed to upload image to Google Drive', [
+                'filename' => $file->getClientOriginalName(),
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Update image with Google Drive URL from callback
+     *
+     * @param int $logId
+     * @param string $googleUrl
+     * @param string $fileId
+     * @return TblCcUploadImage|null
+     */
+    public function updateGoogleUrl(int $logId, string $googleUrl, string $fileId): ?TblCcUploadImage
+    {
+        try {
+            // Find by logId - CHÍNH XÁC HƠN
+            $uploadImage = TblCcUploadImage::where('logId', (string)$logId)->first();
+
+            if (!$uploadImage) {
+                Log::warning('Upload image not found for callback', [
+                    'log_id' => $logId,
+                    'google_url' => $googleUrl
+                ]);
+                return null;
+            }
+
+            $uploadImage->update([
+                'googleUrl' => $googleUrl,
+                'updatedAt' => now(),
+            ]);
+
+            Log::info('Google URL updated successfully', [
+                'upload_image_id' => $uploadImage->uploadImageId,
+                'log_id' => $logId,
+                'google_url' => $googleUrl,
+                'file_id' => $fileId
+            ]);
+
+            return $uploadImage;
+
+        } catch (Exception $e) {
+            Log::error('Failed to update Google URL', [
+                'log_id' => $logId,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
         }
     }
 
@@ -107,23 +164,17 @@ class ImageUploadService
      */
     public function getImagesByIds(array $imageIds): array
     {
-        if (empty($imageIds)) {
-            return [];
-        }
+        $images = TblCcUploadImage::whereIn('uploadImageId', $imageIds)->get();
 
-        return TblCcUploadImage::whereIn('uploadImageId', $imageIds)
-            ->get()
-            ->map(function ($image) {
-                return [
-                    'uploadImageId' => $image->uploadImageId,
-                    'fileName' => $image->fileName,
-                    'fileType' => $image->fileType,
-                    'localUrl' => $image->localUrl,
-                    'fullLocalUrl' => $image->getFullLocalUrl(),
-                    'googleUrl' => $image->googleUrl,
-                    'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
-                ];
-            })
-            ->toArray();
+        return $images->map(function ($image) {
+            return [
+                'uploadImageId' => $image->uploadImageId,
+                'fileName' => $image->fileName,
+                'fileType' => $image->fileType,
+                'localUrl' => $image->localUrl,
+                'googleUrl' => $image->googleUrl,
+                'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+            ];
+        })->toArray();
     }
 }
