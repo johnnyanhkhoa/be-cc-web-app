@@ -34,7 +34,7 @@ class ImageUploadService
     ): TblCcUploadImage {
         try {
             // Generate callback URL
-            $callbackUrl = 'https://cc-staging-be.mmapp.xyz/api/images/upload-callback';
+            $callbackUrl = 'http://cc-staging-be.mmapp.xyz/api/images/upload-callback';
 
             Log::info('Uploading image to Google Drive', [
                 'filename' => $file->getClientOriginalName(),
