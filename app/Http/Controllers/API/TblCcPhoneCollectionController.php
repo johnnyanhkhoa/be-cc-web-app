@@ -5,12 +5,15 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateCcPhoneCollectionRequest;
 use App\Http\Requests\BulkCreateCcPhoneCollectionRequest;
+use App\Http\Requests\ManualAssignCallsRequest;
 use App\Models\TblCcPhoneCollection;
+use App\Models\User;
 use App\Services\BulkPhoneCollectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class TblCcPhoneCollectionController extends Controller
 {
@@ -348,6 +351,151 @@ class TblCcPhoneCollectionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to mark phone collection as completed',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Manually assign phone collections to a specific user
+     *
+     * @param ManualAssignCallsRequest $request
+     * @return JsonResponse
+     */
+    public function manualAssign(ManualAssignCallsRequest $request): JsonResponse
+    {
+        try {
+            $validated = $request->validated();
+
+            $assignedBy = $validated['assignedBy']; // authUserId
+            $assignTo = $validated['assignTo'];     // authUserId
+            $phoneCollectionIds = $validated['phoneCollectionIds'];
+
+            Log::info('Manual assign request received', [
+                'assigned_by_auth_user_id' => $assignedBy,
+                'assign_to_auth_user_id' => $assignTo,
+                'phone_collection_count' => count($phoneCollectionIds),
+                'phone_collection_ids' => $phoneCollectionIds
+            ]);
+
+            DB::beginTransaction();
+
+            // Tìm users bằng authUserId để verify tồn tại
+            $assignedByUser = User::where('authUserId', $assignedBy)->first();
+            $assignToUser = User::where('authUserId', $assignTo)->first();
+
+            if (!$assignedByUser || !$assignToUser) {
+                throw new Exception('User not found');
+            }
+
+            // Get phone collections to be assigned
+            $phoneCollections = TblCcPhoneCollection::whereIn('phoneCollectionId', $phoneCollectionIds)->get();
+
+            if ($phoneCollections->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No phone collections found',
+                    'error' => 'The specified phone collections do not exist'
+                ], 404);
+            }
+
+            // Check if some IDs were not found
+            $foundIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
+            $notFoundIds = array_diff($phoneCollectionIds, $foundIds);
+
+            if (!empty($notFoundIds)) {
+                Log::warning('Some phone collection IDs not found', [
+                    'not_found_ids' => $notFoundIds
+                ]);
+            }
+
+            // Prepare update data - Lưu authUserId thay vì id
+            $updateData = [
+                'assignedTo' => $assignTo,      // Lưu authUserId trực tiếp
+                'assignedBy' => $assignedBy,    // Lưu authUserId trực tiếp
+                'assignedAt' => now(),
+                'status' => 'assigned',
+                'updatedBy' => $assignedBy,     // Lưu authUserId
+                'updatedAt' => now(),
+            ];
+
+            // Update all phone collections
+            $updatedCount = TblCcPhoneCollection::whereIn('phoneCollectionId', $foundIds)
+                ->update($updateData);
+
+            // Get updated records for response
+            $updatedPhoneCollections = TblCcPhoneCollection::whereIn('phoneCollectionId', $foundIds)->get();
+
+            // Prepare assignments array
+            $assignments = $updatedPhoneCollections->map(function ($pc, $index) use ($assignToUser, $assignedByUser) {
+                return [
+                    'phoneCollectionId' => $pc->phoneCollectionId,
+                    'contractId' => $pc->contractId,
+                    'contractNo' => $pc->contractNo,
+                    'customerFullName' => $pc->customerFullName,
+                    'assignedTo' => [
+                        'authUserId' => $assignToUser->authUserId,
+                        'username' => $assignToUser->username,
+                        'userFullName' => $assignToUser->userFullName,
+                        'email' => $assignToUser->email,
+                    ],
+                    'assignedBy' => [
+                        'authUserId' => $assignedByUser->authUserId,
+                        'username' => $assignedByUser->username,
+                        'userFullName' => $assignedByUser->userFullName,
+                    ],
+                    'assignedAt' => $pc->assignedAt?->format('Y-m-d H:i:s'),
+                    'status' => $pc->status,
+                    'sequence' => $index + 1
+                ];
+            });
+
+            DB::commit();
+
+            Log::info('Manual assign completed successfully', [
+                'assigned_by_auth_user_id' => $assignedBy,
+                'assign_to_auth_user_id' => $assignTo,
+                'total_assigned' => $updatedCount,
+                'not_found_count' => count($notFoundIds)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Phone collections assigned successfully',
+                'data' => [
+                    'assignedBy' => [
+                        'authUserId' => $assignedByUser->authUserId,
+                        'username' => $assignedByUser->username,
+                        'userFullName' => $assignedByUser->userFullName,
+                    ],
+                    'assignTo' => [
+                        'authUserId' => $assignToUser->authUserId,
+                        'username' => $assignToUser->username,
+                        'userFullName' => $assignToUser->userFullName,
+                        'email' => $assignToUser->email,
+                    ],
+                    'assignments' => $assignments,
+                    'summary' => [
+                        'totalRequested' => count($phoneCollectionIds),
+                        'totalAssigned' => $updatedCount,
+                        'notFoundIds' => $notFoundIds,
+                        'assignedAt' => now()->format('Y-m-d H:i:s')
+                    ]
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            Log::error('Manual assign failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->validated()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign phone collections',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }

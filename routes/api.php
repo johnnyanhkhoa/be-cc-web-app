@@ -86,13 +86,16 @@ Route::prefix('call-assignments')->group(function () {
     Route::post('/assign', [App\Http\Controllers\API\CallAssignmentController::class, 'assignCalls']);
 });
 
-// TblCcPhoneCollection API Routes
+// Phone Collection API Routes
 Route::prefix('cc-phone-collections')->group(function () {
     // Get phone collection records with filtering by status and assignedTo
     Route::get('/', [TblCcPhoneCollectionController::class, 'index']);
 
     // Mark phone collection as completed
     Route::patch('/{phoneCollectionId}/complete', [TblCcPhoneCollectionController::class, 'markAsCompleted']);
+
+    // NEW: Manual assign phone collections to user
+    Route::post('/manual-assign', [TblCcPhoneCollectionController::class, 'manualAssign']);
 });
 
 Route::prefix('cc-reasons')->group(function () {
