@@ -409,12 +409,11 @@ class TblCcPhoneCollectionController extends Controller
                 ]);
             }
 
-            // Prepare update data - Lưu authUserId thay vì id
+            // Prepare update data - KHÔNG thay đổi status
             $updateData = [
-                'assignedTo' => $assignTo,      // Lưu authUserId trực tiếp
-                'assignedBy' => $assignedBy,    // Lưu authUserId trực tiếp
+                'assignedTo' => $assignTo,      // Lưu authUserId
+                'assignedBy' => $assignedBy,    // Lưu authUserId
                 'assignedAt' => now(),
-                'status' => 'assigned',
                 'updatedBy' => $assignedBy,     // Lưu authUserId
                 'updatedAt' => now(),
             ];
@@ -433,6 +432,7 @@ class TblCcPhoneCollectionController extends Controller
                     'contractId' => $pc->contractId,
                     'contractNo' => $pc->contractNo,
                     'customerFullName' => $pc->customerFullName,
+                    'status' => $pc->status, // Giữ nguyên status hiện tại
                     'assignedTo' => [
                         'authUserId' => $assignToUser->authUserId,
                         'username' => $assignToUser->username,
@@ -445,7 +445,6 @@ class TblCcPhoneCollectionController extends Controller
                         'userFullName' => $assignedByUser->userFullName,
                     ],
                     'assignedAt' => $pc->assignedAt?->format('Y-m-d H:i:s'),
-                    'status' => $pc->status,
                     'sequence' => $index + 1
                 ];
             });
