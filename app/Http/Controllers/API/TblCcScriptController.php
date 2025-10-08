@@ -189,7 +189,7 @@ class TblCcScriptController extends Controller
             }
 
             $batchId = $phoneCollection->batchId;
-            $daysPastDue = $phoneCollection->daysOverdueNet;
+            $daysPastDue = $phoneCollection->daysOverdueGross;
 
             Log::info('Found phone collection data', [
                 'phone_collection_id' => $phoneCollectionId,
@@ -319,7 +319,7 @@ class TblCcScriptController extends Controller
                         'customerId' => $phoneCollection->customerId,
                         'customerFullName' => $phoneCollection->customerFullName,
                         'batchId' => $phoneCollection->batchId,
-                        'daysOverdueNet' => $phoneCollection->daysOverdueNet,
+                        'daysOverdueGross' => $phoneCollection->daysOverdueGross,
                         'segmentType' => $phoneCollection->segmentType,
                         'status' => $phoneCollection->status,
                         'totalAmount' => $phoneCollection->totalAmount,

@@ -10,6 +10,7 @@ use App\Http\Controllers\API\TblCcPhoneCollectionDetailController;
 use App\Http\Controllers\API\TblCcReasonController;
 use App\Http\Controllers\API\TblCcRemarkController;
 use App\Http\Controllers\API\TblCcScriptController;
+use App\Http\Controllers\API\UserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +86,13 @@ Route::prefix('call-assignments')->group(function () {
     // Assign calls to available agents
     Route::post('/assign', [App\Http\Controllers\API\CallAssignmentController::class, 'assignCalls']);
 });
+
+// User Management Routes
+Route::prefix('users')->group(function () {
+    Route::get('/available-for-assign', [UserController::class, 'getAvailableUsersForAssign']);
+});
+
+Route::get('/users/available-for-assign/debug', [App\Http\Controllers\API\UserController::class, 'debugAvailableUsers']);
 
 // Phone Collection API Routes
 Route::prefix('cc-phone-collections')->group(function () {

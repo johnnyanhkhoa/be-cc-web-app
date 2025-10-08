@@ -94,35 +94,45 @@ class DutyRosterController extends Controller
             Log::info('Creating duty roster assignments', [
                 'start_date' => $validated['start_date'],
                 'end_date' => $validated['end_date'],
-                'agent_ids' => $validated['agent_ids']
+                'agent_auth_user_ids' => $validated['agent_auth_user_ids']
             ]);
 
             DB::beginTransaction();
 
             $startDate = Carbon::parse($validated['start_date']);
             $endDate = Carbon::parse($validated['end_date']);
-            $agentIds = $validated['agent_ids'];
+            $agentAuthUserIds = $validated['agent_auth_user_ids']; // authUserIds
 
-            // Get current user ID - use first available user if no auth
-            $createdBy = User::first()?->id;
+            // Get current user authUserId - use first available user if no auth
+            $firstUser = User::first();
+            $createdBy = $firstUser?->authUserId;
 
             if (!$createdBy) {
                 throw new Exception('No users found in system. Please create at least one user first.');
             }
 
+            // Convert authUserIds to local ids for DutyRoster table
+            $users = User::whereIn('authUserId', $agentAuthUserIds)->get();
+            $authUserIdToLocalId = $users->pluck('id', 'authUserId')->toArray();
+
             $created = [];
-            $skipped = [];
 
             // Create assignments for each date and agent combination
             $current = $startDate->copy();
             while ($current <= $endDate) {
-                foreach ($agentIds as $agentId) {
+                foreach ($agentAuthUserIds as $authUserId) {
                     $dateStr = $current->toDateString();
+                    $localUserId = $authUserIdToLocalId[$authUserId] ?? null;
+
+                    if (!$localUserId) {
+                        Log::warning('User not found for authUserId', ['authUserId' => $authUserId]);
+                        continue;
+                    }
 
                     // Check if duty roster already exists (including soft deleted)
                     $existingDuty = DutyRoster::withTrashed()
                         ->where('work_date', $dateStr)
-                        ->where('user_id', $agentId)
+                        ->where('user_id', $localUserId)
                         ->first();
 
                     if ($existingDuty) {
@@ -136,7 +146,7 @@ class DutyRosterController extends Controller
 
                             $created[] = [
                                 'date' => $dateStr,
-                                'agent_id' => $agentId,
+                                'agent_auth_user_id' => $authUserId,
                                 'status' => 'restored'
                             ];
                         } else {
@@ -148,22 +158,22 @@ class DutyRosterController extends Controller
 
                             $created[] = [
                                 'date' => $dateStr,
-                                'agent_id' => $agentId,
+                                'agent_auth_user_id' => $authUserId,
                                 'status' => 'updated'
                             ];
                         }
                     } else {
                         // Create new record
-                        $dutyRoster = DutyRoster::create([
+                        DutyRoster::create([
                             'work_date' => $dateStr,
-                            'user_id' => $agentId,
+                            'user_id' => $localUserId,
                             'is_working' => true,
                             'created_by' => $createdBy,
                         ]);
 
                         $created[] = [
                             'date' => $dateStr,
-                            'agent_id' => $agentId,
+                            'agent_auth_user_id' => $authUserId,
                             'status' => 'created'
                         ];
                     }
@@ -187,7 +197,7 @@ class DutyRosterController extends Controller
                     'processed' => array_map(function($item) {
                         return [
                             'date' => $item['date'],
-                            'agent_id' => $item['agent_id']
+                            'agent_auth_user_id' => $item['agent_auth_user_id']
                         ];
                     }, $created),
                     'summary' => $summary
@@ -220,19 +230,30 @@ class DutyRosterController extends Controller
     {
         try {
             $request->validate([
-                'user_id' => 'required|integer|exists:users,id',
+                'authUserId' => 'required|integer|exists:users,authUserId', // Đổi từ user_id sang authUserId
                 'date' => 'required|date'
             ]);
 
-            $userId = $request->user_id;
+            $authUserId = $request->authUserId;
             $date = $request->date;
 
             Log::info('Attempting to delete from duty roster', [
-                'user_id' => $userId,
+                'auth_user_id' => $authUserId,
                 'date' => $date
             ]);
 
-            $dutyRoster = DutyRoster::where('user_id', $userId)
+            // Find user by authUserId to get local id
+            $user = User::where('authUserId', $authUserId)->first();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'error' => 'No user found with the specified authUserId'
+                ], 404);
+            }
+
+            $dutyRoster = DutyRoster::where('user_id', $user->id)
                 ->where('work_date', $date)
                 ->first();
 
@@ -255,10 +276,10 @@ class DutyRosterController extends Controller
 
             $agentName = $dutyRoster->user->user_full_name ?? 'Unknown';
 
-            $dutyRoster->delete(); // This will be soft delete now
+            $dutyRoster->delete();
 
             Log::info('Duty roster assignment deleted successfully', [
-                'user_id' => $userId,
+                'auth_user_id' => $authUserId,
                 'work_date' => $date,
                 'agent_name' => $agentName
             ]);
@@ -267,7 +288,7 @@ class DutyRosterController extends Controller
                 'success' => true,
                 'message' => 'Agent removed from duty roster successfully',
                 'data' => [
-                    'user_id' => $userId,
+                    'authUserId' => $authUserId,
                     'date' => $date,
                     'agent_name' => $agentName
                 ]

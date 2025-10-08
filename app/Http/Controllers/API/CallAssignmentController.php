@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\Call;
+use App\Models\TblCcPhoneCollection;
 use App\Models\User;
 use App\Models\DutyRoster;
 use Illuminate\Http\JsonResponse;
@@ -16,7 +16,7 @@ use Exception;
 class CallAssignmentController extends Controller
 {
     /**
-     * Assign calls to available agents using round-robin algorithm
+     * Assign phone collections to available agents using round-robin algorithm
      *
      * @param Request $request
      * @return JsonResponse
@@ -30,8 +30,9 @@ class CallAssignmentController extends Controller
 
             $assignmentDate = $request->assignment_date ?? Carbon::today()->toDateString();
 
-            // Get current user as assigner (default to first user if not authenticated)
-            $assignedBy = User::first()?->id;
+            // Get current user authUserId (default to first user's authUserId if not authenticated)
+            $firstUser = User::first();
+            $assignedBy = $firstUser?->authUserId;
 
             if (!$assignedBy) {
                 throw new Exception('No users found in system. Please create at least one user first.');
@@ -39,7 +40,7 @@ class CallAssignmentController extends Controller
 
             Log::info('Starting call assignment process', [
                 'assignment_date' => $assignmentDate,
-                'assigned_by' => $assignedBy
+                'assigned_by_auth_user_id' => $assignedBy
             ]);
 
             DB::beginTransaction();
@@ -55,25 +56,25 @@ class CallAssignmentController extends Controller
                 ], 400);
             }
 
-            // Step 2: Get calls to assign (all calls except completed)
-            $callsToAssign = Call::where('status', '!=', Call::STATUS_COMPLETED)
-                ->orderBy('created_at', 'asc')
+            // Step 2: Get phone collections to assign (all except completed)
+            $phoneCollectionsToAssign = TblCcPhoneCollection::where('status', '!=', 'completed')
+                ->orderBy('createdAt', 'asc')
                 ->get();
 
-            if ($callsToAssign->isEmpty()) {
+            if ($phoneCollectionsToAssign->isEmpty()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No calls available for assignment',
-                    'error' => 'All calls are already completed'
+                    'message' => 'No phone collections available for assignment',
+                    'error' => 'All phone collections are already completed'
                 ], 400);
             }
 
-            // Step 3: Reset all calls to unassigned (for clean reassignment)
-            $this->resetCallsToUnassigned($callsToAssign, $assignedBy);
+            // Step 3: Reset all phone collections to unassigned (for clean reassignment)
+            $this->resetPhoneCollectionsToUnassigned($phoneCollectionsToAssign, $assignedBy);
 
             // Step 4: Perform round-robin assignment
             $assignmentResults = $this->performRoundRobinAssignment(
-                $callsToAssign,
+                $phoneCollectionsToAssign,
                 $availableAgents,
                 $assignedBy,
                 $assignmentDate
@@ -86,17 +87,17 @@ class CallAssignmentController extends Controller
 
             Log::info('Call assignment completed successfully', [
                 'assignment_date' => $assignmentDate,
-                'total_calls' => $callsToAssign->count(),
+                'total_phone_collections' => $phoneCollectionsToAssign->count(),
                 'total_agents' => $availableAgents->count(),
                 'assignments_made' => count($assignmentResults)
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Call assignment completed successfully',
+                'message' => 'Phone collections assigned successfully',
                 'data' => [
                     'assignment_date' => $assignmentDate,
-                    'total_calls' => $callsToAssign->count(),
+                    'total_phone_collections' => $phoneCollectionsToAssign->count(),
                     'total_agents' => $availableAgents->count(),
                     'assignments' => $assignmentResults,
                     'summary' => $summary
@@ -121,68 +122,68 @@ class CallAssignmentController extends Controller
     }
 
     /**
-     * Reset calls to unassigned status (Option A approach)
+     * Reset phone collections to unassigned status
      *
-     * @param \Illuminate\Support\Collection $calls
+     * @param \Illuminate\Support\Collection $phoneCollections
      * @param int $updatedBy
      * @return void
      */
-    private function resetCallsToUnassigned($calls, int $updatedBy): void
+    private function resetPhoneCollectionsToUnassigned($phoneCollections, int $updatedBy): void
     {
-        $callIds = $calls->pluck('id')->toArray();
+        $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
 
-        Call::whereIn('id', $callIds)->update([
-            'assigned_to' => null,
-            'assigned_by' => null,
-            'assigned_at' => null,
-            'status' => Call::STATUS_PENDING,
-            'updated_by' => $updatedBy,
-            'updated_at' => now(),
+        TblCcPhoneCollection::whereIn('phoneCollectionId', $phoneCollectionIds)->update([
+            'assignedTo' => null,
+            'assignedBy' => null,
+            'assignedAt' => null,
+            'updatedBy' => $updatedBy, // Lưu authUserId
+            'updatedAt' => now(),
         ]);
 
-        Log::info('Reset calls to unassigned', [
-            'call_count' => count($callIds),
-            'updated_by' => $updatedBy
+        Log::info('Reset phone collections to unassigned', [
+            'phone_collection_count' => count($phoneCollectionIds),
+            'updated_by_auth_user_id' => $updatedBy
         ]);
     }
 
     /**
-     * Perform round-robin assignment like "chia bài tiến lên"
+     * Perform round-robin assignment
      *
-     * @param \Illuminate\Support\Collection $calls
+     * @param \Illuminate\Support\Collection $phoneCollections
      * @param \Illuminate\Support\Collection $agents
      * @param int $assignedBy
      * @param string $assignmentDate
      * @return array
      */
-    private function performRoundRobinAssignment($calls, $agents, int $assignedBy, string $assignmentDate): array
+    private function performRoundRobinAssignment($phoneCollections, $agents, int $assignedBy, string $assignmentDate): array
     {
         $assignments = [];
         $agentIndex = 0;
         $agentsArray = $agents->toArray();
         $totalAgents = count($agentsArray);
 
-        foreach ($calls as $index => $call) {
+        foreach ($phoneCollections as $index => $phoneCollection) {
             $currentAgent = $agentsArray[$agentIndex];
 
-            // Update call with assignment
-            $call->update([
-                'assigned_to' => $currentAgent['id'],
-                'assigned_by' => $assignedBy,
-                'assigned_at' => now(),
-                'status' => Call::STATUS_ASSIGNED,
-                'updated_by' => $assignedBy,
+            // Update phone collection with assignment - Lưu authUserId
+            $phoneCollection->update([
+                'assignedTo' => $currentAgent['authUserId'],  // authUserId
+                'assignedBy' => $assignedBy,                  // authUserId
+                'assignedAt' => now(),
+                'updatedBy' => $assignedBy,                   // authUserId
             ]);
 
             $assignments[] = [
-                'call_id' => $call->call_id,
-                'call_internal_id' => $call->id,
-                'agent_id' => $currentAgent['id'],
-                'agent_name' => $currentAgent['user_full_name'],
+                'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                'contractId' => $phoneCollection->contractId,
+                'contractNo' => $phoneCollection->contractNo,
+                'customerFullName' => $phoneCollection->customerFullName,
+                'agent_auth_user_id' => $currentAgent['authUserId'],
+                'agent_name' => $currentAgent['userFullName'],
                 'sequence' => $index + 1
             ];
 
-            // Move to next agent (round-robin like dealing cards)
+            // Move to next agent (round-robin)
             $agentIndex = ($agentIndex + 1) % $totalAgents;
         }
 
@@ -200,19 +201,21 @@ class CallAssignmentController extends Controller
     {
         $summary = [];
 
-        // Initialize all agents with 0 calls
+        // Initialize all agents with 0 phone collections
         foreach ($agents as $agent) {
-            $summary["agent_{$agent['id']}"] = [
-                'agent_id' => $agent['id'],
-                'agent_name' => $agent['user_full_name'],
-                'calls_assigned' => 0
+            $summary["agent_{$agent['authUserId']}"] = [
+                'agent_auth_user_id' => $agent['authUserId'],
+                'agent_name' => $agent['userFullName'],
+                'phone_collections_assigned' => 0
             ];
         }
 
         // Count assignments per agent
         foreach ($assignments as $assignment) {
-            $agentKey = "agent_{$assignment['agent_id']}";
-            $summary[$agentKey]['calls_assigned']++;
+            $agentKey = "agent_{$assignment['agent_auth_user_id']}";
+            if (isset($summary[$agentKey])) {
+                $summary[$agentKey]['phone_collections_assigned']++;
+            }
         }
 
         return array_values($summary);

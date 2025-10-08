@@ -117,40 +117,14 @@ class DutyRoster extends Model
             'end_date' => $endDate
         ]);
 
-        // Debug: Raw query to see what's happening
-        $query = static::with('user')
+        $duties = static::with('user')
             ->where('work_date', '>=', $startDate)
             ->where('work_date', '<=', $endDate)
-            ->where('is_working', true);
-
-        Log::info('SQL Query', [
-            'sql' => $query->toSql(),
-            'bindings' => $query->getBindings()
-        ]);
-
-        $duties = $query->get();
-
-        Log::info('Raw duty roster query result', [
-            'count' => $duties->count(),
-            'duties' => $duties->toArray()
-        ]);
-
-        // Let's also check without the working scope
-        $allDuties = static::with('user')
-            ->where('work_date', '>=', $startDate)
-            ->where('work_date', '<=', $endDate)
+            ->where('is_working', true)
             ->get();
 
-        Log::info('All duties (without working scope)', [
-            'count' => $allDuties->count(),
-            'duties' => $allDuties->map(function($d) {
-                return [
-                    'id' => $d->id,
-                    'work_date' => $d->work_date,
-                    'user_id' => $d->user_id,
-                    'is_working' => $d->is_working
-                ];
-            })
+        Log::info('Duty roster query result', [
+            'count' => $duties->count()
         ]);
 
         $groupedDuties = $duties->groupBy(function($duty) {
@@ -165,7 +139,7 @@ class DutyRoster extends Model
             $dateStr = $current->toDateString();
             $agents = $groupedDuties->get($dateStr, collect())->map(function ($duty) {
                 return [
-                    'user_id' => $duty->user->id,
+                    'authUserId' => $duty->user->authUserId,  // Đổi từ user_id sang authUserId
                     'name' => $duty->user->user_full_name,
                     'email' => $duty->user->email,
                     'username' => $duty->user->username,
@@ -174,18 +148,14 @@ class DutyRoster extends Model
 
             $result[] = [
                 'date' => $dateStr,
-                'day_name' => $current->format('l'), // Monday, Tuesday, etc.
-                'formatted_date' => $current->format('M d'), // Aug 26
+                'day_name' => $current->format('l'),
+                'formatted_date' => $current->format('M d'),
                 'agents' => $agents->values()->all(),
                 'agent_count' => $agents->count(),
             ];
 
             $current->addDay();
         }
-
-        Log::info('Final duty roster result', [
-            'result' => $result
-        ]);
 
         return $result;
     }

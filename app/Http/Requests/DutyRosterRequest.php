@@ -23,8 +23,8 @@ class DutyRosterRequest extends FormRequest
         return [
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-            'agent_ids' => ['required', 'array', 'min:1'],
-            'agent_ids.*' => ['required', 'integer', 'exists:users,id'],
+            'agent_auth_user_ids' => ['required', 'array', 'min:1'], // Đổi tên field
+            'agent_auth_user_ids.*' => ['required', 'integer', 'exists:users,authUserId'], // Validate với authUserId
         ];
     }
 
@@ -38,9 +38,9 @@ class DutyRosterRequest extends FormRequest
             'start_date.after_or_equal' => 'Start date must be today or future date',
             'end_date.required' => 'End date is required',
             'end_date.after_or_equal' => 'End date must be after or equal start date',
-            'agent_ids.required' => 'At least one agent must be selected',
-            'agent_ids.min' => 'At least one agent must be selected',
-            'agent_ids.*.exists' => 'Selected agent does not exist',
+            'agent_auth_user_ids.required' => 'At least one agent must be selected',
+            'agent_auth_user_ids.min' => 'At least one agent must be selected',
+            'agent_auth_user_ids.*.exists' => 'Selected agent does not exist',
         ];
     }
 
@@ -50,7 +50,7 @@ class DutyRosterRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'agent_ids' => 'agents',
+            'agent_auth_user_ids' => 'agents',
         ];
     }
 
