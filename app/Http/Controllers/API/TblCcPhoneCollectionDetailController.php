@@ -173,7 +173,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             }
 
             // Get call attempts with relationships
-            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'creator'])
+            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult'])
                 ->byPhoneCollectionId($phoneCollectionId)
                 ->orderBy('createdAt', 'desc')
                 ->get();
@@ -184,6 +184,13 @@ class TblCcPhoneCollectionDetailController extends Controller
                 $uploadedImages = [];
                 if ($attempt->uploadDocuments && isset($attempt->uploadDocuments['uploadImageId'])) {
                     $uploadedImages = $this->imageUploadService->getImagesByIds($attempt->uploadDocuments['uploadImageId']);
+                }
+
+                // Get creator by authUserId
+                $createdByUser = null;
+                if ($attempt->createdBy) {
+                    $user = \App\Models\User::where('authUserId', $attempt->createdBy)->first();
+                    $createdByUser = $user ? $user->userFullName : null;
                 }
 
                 return [
@@ -209,18 +216,13 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkId' => $attempt->standardRemarkId,
                     'standardRemarkContent' => $attempt->standardRemarkContent,
                     'reschedulingEvidence' => $attempt->reschedulingEvidence,
-                    'uploadDocuments' => $attempt->uploadDocuments, // Original JSON
-                    'uploadedImages' => $uploadedImages, // Expanded image data with fileName, localUrl, googleUrl
+                    'uploadDocuments' => $attempt->uploadDocuments,
+                    'uploadedImages' => $uploadedImages,
                     'createdAt' => $attempt->createdAt?->format('Y-m-d H:i:s'),
-                    'createdBy' => $attempt->createdBy,
+                    'createdBy' => $createdByUser, // Changed: Now returns userFullName
                     // Related data
                     'standardRemark' => $attempt->standardRemark,
                     'callResult' => $attempt->callResult,
-                    'creator' => $attempt->creator ? [
-                        'id' => $attempt->creator->id,
-                        'username' => $attempt->creator->username,
-                        'userFullName' => $attempt->creator->userFullName,
-                    ] : null,
                 ];
             });
 
