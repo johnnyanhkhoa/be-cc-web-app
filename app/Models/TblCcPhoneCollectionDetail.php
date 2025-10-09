@@ -76,7 +76,7 @@ class TblCcPhoneCollectionDetail extends Model
         'reschedulingEvidence' => 'boolean',
         'uploadDocuments' => 'json',
         'promisedPaymentDate' => 'date',
-        'dtCallLater' => 'date',
+        'dtCallLater' => 'datetime',
         'dtCallStarted' => 'datetime',
         'dtCallEnded' => 'datetime',
         'createdAt' => 'datetime',
