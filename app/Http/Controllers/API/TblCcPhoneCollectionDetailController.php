@@ -107,9 +107,9 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'remark' => $phoneCollectionDetail->remark,
                     'promisedPaymentDate' => $phoneCollectionDetail->promisedPaymentDate?->format('Y-m-d'),
                     'askingPostponePayment' => $phoneCollectionDetail->askingPostponePayment,
-                    'dtCallLater' => $phoneCollectionDetail->dtCallLater?->format('Y-m-d H:i:s'),
-                    'dtCallStarted' => $phoneCollectionDetail->dtCallStarted?->format('Y-m-d H:i:s'),
-                    'dtCallEnded' => $phoneCollectionDetail->dtCallEnded?->format('Y-m-d H:i:s'),
+                    'dtCallLater' => $phoneCollectionDetail->dtCallLater?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'dtCallStarted' => $phoneCollectionDetail->dtCallStarted?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'dtCallEnded' => $phoneCollectionDetail->dtCallEnded?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatePhoneRequest' => $phoneCollectionDetail->updatePhoneRequest,
                     'updatePhoneRemark' => $phoneCollectionDetail->updatePhoneRemark,
                     'standardRemarkId' => $phoneCollectionDetail->standardRemarkId,
@@ -117,7 +117,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'reschedulingEvidence' => $phoneCollectionDetail->reschedulingEvidence,
                     'uploadDocuments' => $phoneCollectionDetail->uploadDocuments,
                     'uploadedImages' => $uploadedImagesData,
-                    'createdAt' => $phoneCollectionDetail->createdAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $phoneCollectionDetail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $phoneCollectionDetail->createdBy,
                 ]
             ], 201);
@@ -208,9 +208,9 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'remark' => $attempt->remark,
                     'promisedPaymentDate' => $attempt->promisedPaymentDate?->format('Y-m-d'),
                     'askingPostponePayment' => $attempt->askingPostponePayment,
-                    'dtCallLater' => $attempt->dtCallLater?->format('Y-m-d H:i:s'),
-                    'dtCallStarted' => $attempt->dtCallStarted?->format('Y-m-d H:i:s'),
-                    'dtCallEnded' => $attempt->dtCallEnded?->format('Y-m-d H:i:s'),
+                    'dtCallLater' => $attempt->dtCallLater?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'dtCallStarted' => $attempt->dtCallStarted?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'dtCallEnded' => $attempt->dtCallEnded?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatePhoneRequest' => $attempt->updatePhoneRequest,
                     'updatePhoneRemark' => $attempt->updatePhoneRemark,
                     'standardRemarkId' => $attempt->standardRemarkId,
@@ -218,7 +218,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'reschedulingEvidence' => $attempt->reschedulingEvidence,
                     'uploadDocuments' => $attempt->uploadDocuments,
                     'uploadedImages' => $uploadedImages,
-                    'createdAt' => $attempt->createdAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $attempt->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $createdByUser, // Changed: Now returns userFullName
                     // Related data
                     'standardRemark' => $attempt->standardRemark,
@@ -242,7 +242,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'customerFullName' => $phoneCollection->customerFullName,
                         'status' => $phoneCollection->status,
                         'totalAttempts' => $phoneCollection->totalAttempts,
-                        'lastAttemptAt' => $phoneCollection->lastAttemptAt?->format('Y-m-d H:i:s'),
+                        'lastAttemptAt' => $phoneCollection->lastAttemptAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                         'segmentType' => $phoneCollection->segmentType,
                         'dueDate' => $phoneCollection->dueDate?->format('Y-m-d'),
                         'totalAmount' => $phoneCollection->totalAmount,
@@ -253,8 +253,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'summary' => [
                         'byContactType' => $attempts->groupBy('contactType')->map->count(),
                         'byCallStatus' => $attempts->groupBy('callStatus')->map->count(),
-                        'latestAttempt' => $attempts->first()?->createdAt?->format('Y-m-d H:i:s'),
-                        'oldestAttempt' => $attempts->last()?->createdAt?->format('Y-m-d H:i:s'),
+                        'latestAttempt' => $attempts->first()?->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+                        'oldestAttempt' => $attempts->last()?->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     ]
                 ]
             ], 200);
@@ -408,7 +408,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'remark' => $detail->remark,
                     'uploadDocuments' => $detail->uploadDocuments,
                     'uploadedImages' => $uploadedImages,
-                    'createdAt' => $detail->createdAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $detail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'phoneCollection' => $detail->phoneCollection ? [
                         'contractId' => $detail->phoneCollection->contractId,
                         'customerFullName' => $detail->phoneCollection->customerFullName,
@@ -504,7 +504,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'contactType' => $detail->contactType,
                     'callStatus' => $detail->callStatus,
                     'contactPhoneNumer' => $detail->contactPhoneNumer,
-                    'createdAt' => $detail->createdAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $detail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $detail->createdBy,
                     'creator' => $detail->creator ? [
                         'id' => $detail->creator->id,
