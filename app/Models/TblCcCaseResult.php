@@ -10,75 +10,51 @@ class TblCcCaseResult extends Model
 {
     use HasFactory, SoftDeletes;
 
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
     protected $table = 'tbl_CcCaseResult';
-
-    /**
-     * The primary key associated with the table.
-     *
-     * @var string
-     */
     protected $primaryKey = 'caseResultId';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'caseResultName',
-        'escalationRemark',
         'caseResultRemark',
-        'preDue',
-        'pastDue',
-        'escalation',
-        'specialCase',
-        'dslp',
+        'contactType',
+        'batchId',
+        'requiredField',
         'createdBy',
         'updatedBy',
         'deletedBy',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected $casts = [
-        'preDue' => 'boolean',
-        'pastDue' => 'boolean',
-        'escalation' => 'boolean',
-        'specialCase' => 'boolean',
-        'dslp' => 'boolean',
+        'requiredField' => 'array', // Cast JSON to array
         'createdAt' => 'datetime',
         'updatedAt' => 'datetime',
         'deletedAt' => 'datetime',
     ];
 
-    /**
-     * The name of the "created at" column.
-     *
-     * @var string|null
-     */
     const CREATED_AT = 'createdAt';
-
-    /**
-     * The name of the "updated at" column.
-     *
-     * @var string|null
-     */
     const UPDATED_AT = 'updatedAt';
+    const DELETED_AT = 'deletedAt';
 
     /**
-     * The name of the "deleted at" column for soft deletes.
-     *
-     * @var string
+     * Contact type constants
      */
-    const DELETED_AT = 'deletedAt';
+    const CONTACT_TYPE_ALL = 'all';
+    const CONTACT_TYPE_RPC = 'rpc';
+    const CONTACT_TYPE_TPC = 'tpc';
+    const CONTACT_TYPE_RB = 'rb';
+
+    /**
+     * Get all available contact types
+     */
+    public static function getContactTypes(): array
+    {
+        return [
+            self::CONTACT_TYPE_ALL,
+            self::CONTACT_TYPE_RPC,
+            self::CONTACT_TYPE_TPC,
+            self::CONTACT_TYPE_RB,
+        ];
+    }
 
     /**
      * Scope for active case results (not deleted)
@@ -89,42 +65,26 @@ class TblCcCaseResult extends Model
     }
 
     /**
-     * Scope for pre-due cases
+     * Scope for specific contact type
      */
-    public function scopePreDue($query)
+    public function scopeByContactType($query, $contactType)
     {
-        return $query->where('preDue', true);
+        return $query->where('contactType', $contactType);
     }
 
     /**
-     * Scope for past-due cases
+     * Scope for specific batch
      */
-    public function scopePastDue($query)
+    public function scopeByBatch($query, $batchId)
     {
-        return $query->where('pastDue', true);
+        return $query->where('batchId', $batchId);
     }
 
     /**
-     * Scope for escalation cases
+     * Relationship with Batch
      */
-    public function scopeEscalation($query)
+    public function batch()
     {
-        return $query->where('escalation', true);
-    }
-
-    /**
-     * Scope for special cases
-     */
-    public function scopeSpecialCase($query)
-    {
-        return $query->where('specialCase', true);
-    }
-
-    /**
-     * Scope for DSLP cases
-     */
-    public function scopeDslp($query)
-    {
-        return $query->where('dslp', true);
+        return $this->belongsTo(TblCcBatch::class, 'batchId', 'batchId');
     }
 }

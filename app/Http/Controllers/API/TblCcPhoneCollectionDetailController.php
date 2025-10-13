@@ -284,7 +284,14 @@ class TblCcPhoneCollectionDetailController extends Controller
         try {
             $caseResults = TblCcCaseResult::active()
                                         ->orderBy('caseResultName')
-                                        ->get(['caseResultId', 'caseResultName', 'escalationRemark', 'caseResultRemark', 'preDue', 'pastDue', 'escalation', 'specialCase', 'dslp']);
+                                        ->get([
+                                            'caseResultId',
+                                            'caseResultName',
+                                            'caseResultRemark',
+                                            'contactType',
+                                            'batchId',
+                                            'requiredField'
+                                        ]);
 
             return response()->json([
                 'success' => true,
@@ -296,6 +303,94 @@ class TblCcPhoneCollectionDetailController extends Controller
         } catch (Exception $e) {
             Log::error('Failed to get case results', [
                 'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve case results',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get case results by phone collection ID
+     * Query phone collection → get batchId → get case results for that batch
+     *
+     * @param int $phoneCollectionId
+     * @return JsonResponse
+     */
+    public function getCaseResultsByPhoneCollection(int $phoneCollectionId): JsonResponse
+    {
+        try {
+            Log::info('Getting case results by phone collection', [
+                'phone_collection_id' => $phoneCollectionId
+            ]);
+
+            // Step 1: Get phone collection to find batchId
+            $phoneCollection = TblCcPhoneCollection::find($phoneCollectionId);
+
+            if (!$phoneCollection) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phone collection not found',
+                    'error' => 'The specified phone collection does not exist'
+                ], 404);
+            }
+
+            if (!$phoneCollection->batchId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No batch assigned to this phone collection',
+                    'error' => 'batchId is null for this phone collection'
+                ], 400);
+            }
+
+            $batchId = $phoneCollection->batchId;
+
+            Log::info('Found batchId for phone collection', [
+                'phone_collection_id' => $phoneCollectionId,
+                'batch_id' => $batchId
+            ]);
+
+            // Step 2: Get case results for this batch
+            $caseResults = TblCcCaseResult::active()
+                                        ->byBatch($batchId)
+                                        ->orderBy('caseResultName')
+                                        ->get([
+                                            'caseResultId',
+                                            'caseResultName',
+                                            'caseResultRemark',
+                                            'contactType',
+                                            'batchId',
+                                            'requiredField'
+                                        ]);
+
+            Log::info('Case results retrieved', [
+                'batch_id' => $batchId,
+                'results_count' => $caseResults->count()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Case results retrieved successfully',
+                'data' => [
+                    'phone_collection' => [
+                        'id' => $phoneCollection->phoneCollectionId,
+                        'batch_id' => $batchId,
+                        'contract_no' => $phoneCollection->contractNo,
+                        'customer_name' => $phoneCollection->customerFullName,
+                    ],
+                    'case_results' => $caseResults,
+                    'total_results' => $caseResults->count()
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to get case results by phone collection', [
+                'phone_collection_id' => $phoneCollectionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([

@@ -164,12 +164,19 @@ Route::prefix('scripts')->group(function () {
 
 // TblCcPhoneCollectionDetail API Routes
 Route::prefix('cc-phone-collection-details')->group(function () {
-    // Create new phone collection detail (now requires phoneCollectionId)
+    // Create new phone collection detail
     Route::post('/', [TblCcPhoneCollectionDetailController::class, 'store']);
 
-    // Get supporting data for forms
+    // Get case results (all active)
     Route::get('/case-results', [TblCcPhoneCollectionDetailController::class, 'getCaseResults']);
+
+    // NEW: Get case results by phone collection ID
+    Route::get('/case-results-by-phone-collection/{phoneCollectionId}', [TblCcPhoneCollectionDetailController::class, 'getCaseResultsByPhoneCollection']);
+
+    // Get standard remarks
     Route::get('/standard-remarks', [TblCcPhoneCollectionDetailController::class, 'getStandardRemarks']);
+
+    // Get metadata
     Route::get('/metadata', [TblCcPhoneCollectionDetailController::class, 'getMetadata']);
 
     // Get recent records for reference
