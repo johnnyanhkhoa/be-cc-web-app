@@ -133,4 +133,12 @@ class TblCcPhoneCollection extends Model
     {
         return $query->where('assignedTo', $assignedTo);
     }
+
+    /**
+     * Relationship with TblCcBatch
+     */
+    public function batch()
+    {
+        return $this->belongsTo(TblCcBatch::class, 'batchId', 'batchId');
+    }
 }

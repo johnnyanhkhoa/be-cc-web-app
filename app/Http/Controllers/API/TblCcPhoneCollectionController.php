@@ -189,7 +189,8 @@ class TblCcPhoneCollectionController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = TblCcPhoneCollection::query();
+            // Add with('batch') to eager load relationship
+            $query = TblCcPhoneCollection::with('batch');
 
             // Filter by status if provided
             if ($request->has('status') && !empty($request->status)) {
@@ -224,10 +225,40 @@ class TblCcPhoneCollectionController extends Controller
             // Get all results without pagination
             $phoneCollections = $query->get();
 
+            // Transform data to include batchCode
+            $transformedData = $phoneCollections->map(function ($pc) {
+                return [
+                    'phoneCollectionId' => $pc->phoneCollectionId,
+                    'status' => $pc->status,
+                    'assignedTo' => $pc->assignedTo,
+                    'assignedBy' => $pc->assignedBy,
+                    'assignedAt' => $pc->assignedAt?->format('Y-m-d H:i:s'),
+                    'totalAttempts' => $pc->totalAttempts,
+                    'lastAttemptAt' => $pc->lastAttemptAt?->format('Y-m-d H:i:s'),
+                    'lastAttemptBy' => $pc->lastAttemptBy,
+                    'segmentType' => $pc->segmentType,
+                    'contractId' => $pc->contractId,
+                    'contractNo' => $pc->contractNo,
+                    'customerId' => $pc->customerId,
+                    'customerFullName' => $pc->customerFullName,
+                    'paymentId' => $pc->paymentId,
+                    'paymentNo' => $pc->paymentNo,
+                    'dueDate' => $pc->dueDate?->format('Y-m-d'),
+                    'daysOverdueGross' => $pc->daysOverdueGross,
+                    'daysOverdueNet' => $pc->daysOverdueNet,
+                    'totalAmount' => $pc->totalAmount,
+                    'amountUnpaid' => $pc->amountUnpaid,
+                    'batchId' => $pc->batchId,
+                    'batchCode' => $pc->batch?->code, // NEW: Batch code from relationship
+                    'createdAt' => $pc->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $pc->updatedAt?->format('Y-m-d H:i:s'),
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Phone collections retrieved successfully',
-                'data' => $phoneCollections,
+                'data' => $transformedData,
                 'total' => $phoneCollections->count()
             ], 200);
 
