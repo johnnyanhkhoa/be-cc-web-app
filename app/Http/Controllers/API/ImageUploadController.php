@@ -34,17 +34,20 @@ class ImageUploadController extends Controller
                 'userId' => ['required', 'integer'],
                 'username' => ['required', 'string'],
                 'description' => ['nullable', 'string'],
+                'phoneCollectionDetailId' => ['required', 'integer', 'exists:tbl_CcPhoneCollectionDetail,phoneCollectionDetailId'], // ✅ THÊM
             ]);
 
             $files = $request->file('images');
             $userId = $request->input('userId');
             $username = $request->input('username');
             $description = $request->input('description');
+            $phoneCollectionDetailId = $request->input('phoneCollectionDetailId');
 
             Log::info('Starting image upload to Google Drive', [
                 'file_count' => count($files),
                 'user_id' => $userId,
-                'username' => $username
+                'username' => $username,
+                'phone_collection_detail_id' => $phoneCollectionDetailId // ✅ THÊM
             ]);
 
             $uploadedImages = [];
@@ -54,7 +57,8 @@ class ImageUploadController extends Controller
                     $file,
                     $userId,
                     $username,
-                    $description
+                    $description,
+                    $phoneCollectionDetailId // ✅ THÊM PARAMETER
                 );
 
                 $uploadedImages[] = [

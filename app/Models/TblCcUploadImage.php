@@ -35,6 +35,7 @@ class TblCcUploadImage extends Model
         'localUrl',
         'googleUrl',
         'logId',
+        'phoneCollectionDetailId',
         'createdBy',
         'updatedBy',
         'deletedBy',
@@ -79,5 +80,17 @@ class TblCcUploadImage extends Model
     public function getFullLocalUrl(): string
     {
         return url($this->localUrl);
+    }
+
+    /**
+     * Relationship with TblCcPhoneCollectionDetail
+     */
+    public function phoneCollectionDetail()
+    {
+        return $this->belongsTo(
+            TblCcPhoneCollectionDetail::class,
+            'phoneCollectionDetailId',
+            'phoneCollectionDetailId'
+        );
     }
 }

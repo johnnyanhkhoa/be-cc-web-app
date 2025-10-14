@@ -58,9 +58,6 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
 
             // Evidence and Documents
             'reschedulingEvidence' => ['nullable', 'boolean'],
-            'uploadDocuments' => ['nullable', 'json'],
-            'uploadImageIds' => ['nullable', 'array'],
-            'uploadImageIds.*' => ['integer', 'exists:tbl_CcUploadImage,uploadImageId'],
 
             // Audit
             'createdBy' => ['required', 'integer'],
@@ -86,7 +83,6 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             'dtCallEnded.date_format' => 'Call end time must be in format: Y-m-d H:i:s',
             'dtCallEnded.after' => 'Call end time must be after call start time',
             'createdBy.required' => 'Created by is required for audit tracking',
-            'uploadImageIds.*.exists' => 'One or more uploaded images do not exist',
         ];
     }
 

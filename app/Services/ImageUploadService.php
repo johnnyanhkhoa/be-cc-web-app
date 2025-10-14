@@ -30,7 +30,8 @@ class ImageUploadService
         UploadedFile $file,
         int $userId,
         string $username,
-        ?string $description = null
+        ?string $description = null,
+        ?int $phoneCollectionDetailId = null // ✅ THÊM PARAMETER
     ): TblCcUploadImage {
         try {
             // Generate callback URL
@@ -40,6 +41,7 @@ class ImageUploadService
                 'filename' => $file->getClientOriginalName(),
                 'size' => $file->getSize(),
                 'user_id' => $userId,
+                'phone_collection_detail_id' => $phoneCollectionDetailId, // ✅ THÊM
                 'callback_url' => $callbackUrl
             ]);
 
@@ -84,6 +86,7 @@ class ImageUploadService
                 'localUrl' => $data['url'], // Local URL from Google Image API
                 'googleUrl' => null, // Will be updated via callback
                 'logId' => (string)$data['log_id'],
+                'phoneCollectionDetailId' => $phoneCollectionDetailId, // ✅ THÊM
                 'createdBy' => $userId,
                 'createdAt' => now(),
             ]);

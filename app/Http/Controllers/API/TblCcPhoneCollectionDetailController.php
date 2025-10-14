@@ -35,34 +35,14 @@ class TblCcPhoneCollectionDetailController extends Controller
         try {
             $validatedData = $request->validated();
 
-            Log::info('Creating phone collection detail with JSON', [
+            Log::info('Creating phone collection detail', [
                 'phone_collection_id' => $validatedData['phoneCollectionId'],
                 'contact_type' => $validatedData['contactType'] ?? null,
                 'call_status' => $validatedData['callStatus'] ?? null,
-                'createdBy' => $validatedData['createdBy'],
-                'has_upload_image_ids' => isset($validatedData['uploadImageIds']) && !empty($validatedData['uploadImageIds'])
+                'createdBy' => $validatedData['createdBy']
             ]);
 
             DB::beginTransaction();
-
-            // Handle uploadDocuments JSON
-            $uploadDocumentsJson = null;
-            if (isset($validatedData['uploadImageIds']) && !empty($validatedData['uploadImageIds'])) {
-                $uploadDocumentsJson = ['uploadImageId' => $validatedData['uploadImageIds']];
-
-                Log::info('Using uploaded image IDs', [
-                    'upload_image_ids' => $validatedData['uploadImageIds']
-                ]);
-            } elseif (isset($validatedData['uploadDocuments'])) {
-                // Fallback: if uploadDocuments JSON is provided directly
-                $uploadDocumentsJson = is_string($validatedData['uploadDocuments'])
-                    ? json_decode($validatedData['uploadDocuments'], true)
-                    : $validatedData['uploadDocuments'];
-            }
-
-            // Remove uploadImageIds from data and set uploadDocuments
-            unset($validatedData['uploadImageIds']);
-            $validatedData['uploadDocuments'] = $uploadDocumentsJson;
 
             // Create the record
             $phoneCollectionDetail = TblCcPhoneCollectionDetail::create($validatedData);
@@ -81,13 +61,19 @@ class TblCcPhoneCollectionDetailController extends Controller
             DB::commit();
 
             // Load relationships for response
-            $phoneCollectionDetail->load(['standardRemark', 'creator', 'phoneCollection']);
+            $phoneCollectionDetail->load(['standardRemark', 'creator', 'phoneCollection', 'uploadImages']);
 
             // Get uploaded images for response
-            $uploadedImagesData = [];
-            if ($uploadDocumentsJson && isset($uploadDocumentsJson['uploadImageId'])) {
-                $uploadedImagesData = $this->imageUploadService->getImagesByIds($uploadDocumentsJson['uploadImageId']);
-            }
+            $uploadedImagesData = $phoneCollectionDetail->uploadImages->map(function ($image) {
+                return [
+                    'uploadImageId' => $image->uploadImageId,
+                    'fileName' => $image->fileName,
+                    'fileType' => $image->fileType,
+                    'localUrl' => $image->localUrl,
+                    'googleUrl' => $image->googleUrl,
+                    'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                ];
+            })->toArray();
 
             return response()->json([
                 'success' => true,
@@ -115,7 +101,6 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkId' => $phoneCollectionDetail->standardRemarkId,
                     'standardRemarkContent' => $phoneCollectionDetail->standardRemarkContent,
                     'reschedulingEvidence' => $phoneCollectionDetail->reschedulingEvidence,
-                    'uploadDocuments' => $phoneCollectionDetail->uploadDocuments,
                     'uploadedImages' => $uploadedImagesData,
                     'createdAt' => $phoneCollectionDetail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $phoneCollectionDetail->createdBy,
@@ -173,18 +158,24 @@ class TblCcPhoneCollectionDetailController extends Controller
             }
 
             // Get call attempts with relationships
-            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult'])
+            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'uploadImages'])
                 ->byPhoneCollectionId($phoneCollectionId)
                 ->orderBy('createdAt', 'desc')
                 ->get();
 
             // Transform data for response
             $transformedAttempts = $attempts->map(function ($attempt) {
-                // Get uploaded images if exists
-                $uploadedImages = [];
-                if ($attempt->uploadDocuments && isset($attempt->uploadDocuments['uploadImageId'])) {
-                    $uploadedImages = $this->imageUploadService->getImagesByIds($attempt->uploadDocuments['uploadImageId']);
-                }
+                // Get uploaded images from relationship
+                $uploadedImages = $attempt->uploadImages->map(function ($image) {
+                    return [
+                        'uploadImageId' => $image->uploadImageId,
+                        'fileName' => $image->fileName,
+                        'fileType' => $image->fileType,
+                        'localUrl' => $image->localUrl,
+                        'googleUrl' => $image->googleUrl,
+                        'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                    ];
+                })->toArray();
 
                 // Get creator by authUserId
                 $createdByUser = null;
@@ -216,7 +207,6 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'standardRemarkId' => $attempt->standardRemarkId,
                     'standardRemarkContent' => $attempt->standardRemarkContent,
                     'reschedulingEvidence' => $attempt->reschedulingEvidence,
-                    'uploadDocuments' => $attempt->uploadDocuments,
                     'uploadedImages' => $uploadedImages,
                     'createdAt' => $attempt->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $createdByUser, // Changed: Now returns userFullName
@@ -482,18 +472,24 @@ class TblCcPhoneCollectionDetailController extends Controller
     public function getRecent(): JsonResponse
     {
         try {
-            $recentDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection'])
-                                                     ->orderBy('createdAt', 'desc')
-                                                     ->take(10)
-                                                     ->get();
+            $recentDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection', 'uploadImages'])
+                ->orderBy('createdAt', 'desc')
+                ->take(10)
+                ->get();
 
             // Transform data with uploaded images
             $transformedDetails = $recentDetails->map(function ($detail) {
-                // Get uploaded images if exists
-                $uploadedImages = [];
-                if ($detail->uploadDocuments && isset($detail->uploadDocuments['uploadImageId'])) {
-                    $uploadedImages = $this->imageUploadService->getImagesByIds($detail->uploadDocuments['uploadImageId']);
-                }
+                // Get uploaded images from relationship
+                $uploadedImages = $detail->uploadImages->map(function ($image) {
+                    return [
+                        'uploadImageId' => $image->uploadImageId,
+                        'fileName' => $image->fileName,
+                        'fileType' => $image->fileType,
+                        'localUrl' => $image->localUrl,
+                        'googleUrl' => $image->googleUrl,
+                        'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                    ];
+                })->toArray();
 
                 return [
                     'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
@@ -501,7 +497,6 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'contactType' => $detail->contactType,
                     'callStatus' => $detail->callStatus,
                     'remark' => $detail->remark,
-                    'uploadDocuments' => $detail->uploadDocuments,
                     'uploadedImages' => $uploadedImages,
                     'createdAt' => $detail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'phoneCollection' => $detail->phoneCollection ? [
@@ -570,7 +565,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
 
             // Get all call details with remarks for these phone collections
-            $callDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection'])
+            $callDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection', 'uploadImages'])
                 ->whereIn('phoneCollectionId', $phoneCollectionIds)
                 ->where(function($query) {
                     // Only get records that have remarks
@@ -606,6 +601,17 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'username' => $detail->creator->username,
                         'userFullName' => $detail->creator->userFullName,
                     ] : null,
+                    // ✅ THÊM DÒNG NÀY
+                    'uploadedImages' => $detail->uploadImages->map(function ($image) {
+                        return [
+                            'uploadImageId' => $image->uploadImageId,
+                            'fileName' => $image->fileName,
+                            'fileType' => $image->fileType,
+                            'localUrl' => $image->localUrl,
+                            'googleUrl' => $image->googleUrl,
+                            'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                        ];
+                    })->toArray(),
                 ];
             });
 

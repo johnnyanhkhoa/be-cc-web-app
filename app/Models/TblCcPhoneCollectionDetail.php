@@ -51,7 +51,6 @@ class TblCcPhoneCollectionDetail extends Model
         'standardRemarkId',
         'standardRemarkContent',
         'reschedulingEvidence',
-        'uploadDocuments',
         'createdBy',
         'updatedBy',
         'deletedBy',
@@ -74,7 +73,6 @@ class TblCcPhoneCollectionDetail extends Model
         'askingPostponePayment' => 'boolean',
         'updatePhoneRequest' => 'boolean',
         'reschedulingEvidence' => 'boolean',
-        'uploadDocuments' => 'json',
         'promisedPaymentDate' => 'date',
         'dtCallLater' => 'datetime',
         'dtCallStarted' => 'datetime',
@@ -232,5 +230,17 @@ class TblCcPhoneCollectionDetail extends Model
             // TODO: Set from authenticated user when auth is implemented
             // $model->updatedBy = auth()->id();
         });
+    }
+
+    /**
+     * Relationship with TblCcUploadImage
+     */
+    public function uploadImages()
+    {
+        return $this->hasMany(
+            TblCcUploadImage::class,
+            'phoneCollectionDetailId',
+            'phoneCollectionDetailId'
+        );
     }
 }
