@@ -69,6 +69,7 @@ class ImageUploadController extends Controller
                     'googleUrl' => $uploadImage->googleUrl, // null initially
                     'status' => 'processing', // Indicate Google Drive upload is in progress
                     'createdAt' => $uploadImage->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => null
                 ];
             }
 
@@ -140,17 +141,17 @@ class ImageUploadController extends Controller
             }
 
             // Check if record exists BEFORE update
-            $existing = TblCcUploadImage::where('logId', (string)$logId)->first();
+            $existing = TblCcUploadImage::where('googleUploadServiceLogId', (string)$logId)->first();
 
             Log::info('Looking for upload record', [
-                'log_id' => $logId,
+                'google_upload_service_log_id' => $logId,
                 'found' => $existing ? 'YES' : 'NO',
                 'record' => $existing ? $existing->toArray() : null
             ]);
 
             if (!$existing) {
                 Log::error('Record not found for log_id', [
-                    'log_id' => $logId,
+                    'google_upload_service_log_id' => $logId,
                     'all_records' => TblCcUploadImage::whereNull('googleUrl')->get()->toArray()
                 ]);
                 return response()->json(['success' => false], 200);

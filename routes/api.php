@@ -11,6 +11,7 @@ use App\Http\Controllers\API\TblCcReasonController;
 use App\Http\Controllers\API\TblCcRemarkController;
 use App\Http\Controllers\API\TblCcScriptController;
 use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\API\VoiceCallController;
 
 /*
 |--------------------------------------------------------------------------
@@ -218,16 +219,12 @@ Route::prefix('payment-guidelines')->group(function () {
     Route::get('/{pmtId}', [PMTGuidelineController::class, 'getById']);
 });
 
-// Voice Call (Asterisk Integration) Routes
+// Voice Call Routes
 Route::prefix('voice-call')->group(function () {
-    // Initiate voice call
-    Route::post('/initiate', [App\Http\Controllers\API\VoiceCallController::class, 'initiateCall']);
-
-    // Get call status (optional)
-    Route::get('/status/{callId}', [App\Http\Controllers\API\VoiceCallController::class, 'getCallStatus']);
-
-    // NEW: Get call logs
-    Route::get('/logs', [App\Http\Controllers\API\VoiceCallController::class, 'getCallLogs']);
+    Route::post('/initiate', [VoiceCallController::class, 'initiateCall']);
+    Route::get('/status/{callId}', [VoiceCallController::class, 'getCallStatus']);
+    Route::get('/logs', [VoiceCallController::class, 'getCallLogs']);
+    Route::put('/logs/{id}', [VoiceCallController::class, 'updateCallLog']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)

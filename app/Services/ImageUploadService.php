@@ -85,8 +85,8 @@ class ImageUploadService
                 'fileType' => $file->getClientOriginalExtension(),
                 'localUrl' => $data['url'], // Local URL from Google Image API
                 'googleUrl' => null, // Will be updated via callback
-                'logId' => (string)$data['log_id'],
-                'phoneCollectionDetailId' => $phoneCollectionDetailId, // ✅ THÊM
+                'googleUploadServiceLogId' => (string)$data['log_id'], // ✅ THÊM DÒNG NÀY
+                'phoneCollectionDetailId' => $phoneCollectionDetailId,
                 'createdBy' => $userId,
                 'createdAt' => now(),
             ]);
@@ -129,7 +129,7 @@ class ImageUploadService
 
             if (!$uploadImage) {
                 Log::warning('Upload image not found for callback', [
-                    'log_id' => $logId,
+                    'google_upload_service_log_id' => $logId,
                     'google_url' => $googleUrl
                 ]);
                 return null;
@@ -142,7 +142,7 @@ class ImageUploadService
 
             Log::info('Google URL updated successfully', [
                 'upload_image_id' => $uploadImage->uploadImageId,
-                'log_id' => $logId,
+                'google_upload_service_log_id' => $logId,
                 'google_url' => $googleUrl,
                 'file_id' => $fileId
             ]);
@@ -151,7 +151,7 @@ class ImageUploadService
 
         } catch (Exception $e) {
             Log::error('Failed to update Google URL', [
-                'log_id' => $logId,
+                'google_upload_service_log_id' => $logId,
                 'error' => $e->getMessage()
             ]);
 

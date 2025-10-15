@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\InitiateCallRequest;
+use App\Http\Requests\UpdateCallLogRequest;
 use App\Services\AsteriskService;
 use App\Models\TblCcAsteriskCallLog;
 use Illuminate\Http\JsonResponse;
@@ -42,21 +43,31 @@ class VoiceCallController extends Controller
 
             DB::beginTransaction();
 
-            // Step 1: Save log to database BEFORE calling Asterisk API
-            $callLog = TblCcAsteriskCallLog::create([
-                'caseId' => $validated['caseId'],
-                'phoneNo' => $validated['phoneNo'],
-                'phoneExtension' => $validated['phoneExtension'],
-                'userId' => $validated['userId'],
-                'username' => $validated['username'],
-                'createdBy' => $validated['userId'], // Use userId as createdBy
-                'createdAt' => now(),
-            ]);
+            // ✅ Tạo instance và tắt timestamps
+            $callLog = new TblCcAsteriskCallLog();
+            $callLog->timestamps = false; // Tắt auto timestamps
+
+            // Set data
+            $callLog->caseId = $validated['caseId'];
+            $callLog->phoneNo = $validated['phoneNo'];
+            $callLog->phoneExtension = $validated['phoneExtension'];
+            $callLog->userId = $validated['userId'];
+            $callLog->username = $validated['username'];
+            $callLog->createdBy = $validated['userId'];
+            $callLog->createdAt = now(); // ✅ Set createdAt manually
+            // updatedAt sẽ là NULL
+
+            $callLog->save();
+
+            // ✅ Bật lại timestamps (quan trọng!)
+            $callLog->timestamps = true;
 
             Log::info('Call log saved to database', [
                 'log_id' => $callLog->id,
                 'case_id' => $validated['caseId'],
-                'phone_no' => $validated['phoneNo']
+                'phone_no' => $validated['phoneNo'],
+                'created_at' => $callLog->createdAt,
+                'updated_at' => $callLog->updatedAt, // Will be NULL
             ]);
 
             // Step 2: Call Asterisk service
@@ -75,11 +86,22 @@ class VoiceCallController extends Controller
                 'phone_no' => $validated['phoneNo']
             ]);
 
-            // Return the exact response from Asterisk API
+            $responseData = $result['data'];
+
+            // Add call log ID to response
+            if (is_array($responseData)) {
+                $responseData['callLogId'] = $callLog->id;
+            } else {
+                // If response is object, convert to array first
+                $responseData = (array) $responseData;
+                $responseData['callLogId'] = $callLog->id;
+            }
+
             return response()->json(
-                $result['data'],
+                $responseData,
                 $result['status_code']
             );
+
 
         } catch (Exception $e) {
             DB::rollBack();
@@ -90,7 +112,6 @@ class VoiceCallController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Determine status code
             $statusCode = $e->getCode();
             if ($statusCode < 100 || $statusCode >= 600) {
                 $statusCode = 500;
@@ -212,6 +233,90 @@ class VoiceCallController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve call logs',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update call log record
+     *
+     * @param UpdateCallLogRequest $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function updateCallLog(UpdateCallLogRequest $request, int $id): JsonResponse
+    {
+        try {
+            // Find the call log record
+            $callLog = TblCcAsteriskCallLog::find($id);
+
+            if (!$callLog) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call log not found',
+                ], 404);
+            }
+
+            $validated = $request->validated();
+
+            // Check if there's any data to update
+            if (empty($validated)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No data provided for update',
+                ], 400);
+            }
+
+            Log::info('Updating call log', [
+                'call_log_id' => $id,
+                'update_data' => $validated
+            ]);
+
+            // Update only provided fields
+            // Note: We don't touch createdAt, createdBy, updatedAt, updatedBy
+            $callLog->timestamps = false; // Disable auto timestamps
+
+            foreach ($validated as $key => $value) {
+                $callLog->$key = $value;
+            }
+
+            $callLog->save();
+
+            $callLog->timestamps = true; // Re-enable timestamps
+
+            Log::info('Call log updated successfully', [
+                'call_log_id' => $id,
+                'updated_fields' => array_keys($validated)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Call log updated successfully',
+                'data' => [
+                    'id' => $callLog->id,
+                    'caseId' => $callLog->caseId,
+                    'phoneNo' => $callLog->phoneNo,
+                    'phoneExtension' => $callLog->phoneExtension,
+                    'userId' => $callLog->userId,
+                    'username' => $callLog->username,
+                    'createdAt' => $callLog->createdAt?->format('Y-m-d H:i:s'),
+                    'createdBy' => $callLog->createdBy,
+                    'updatedAt' => $callLog->updatedAt?->format('Y-m-d H:i:s'),
+                    'updatedBy' => $callLog->updatedBy,
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to update call log', [
+                'call_log_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update call log',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
