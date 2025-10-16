@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\CollectionLogController;
 use App\Http\Controllers\API\DutyRosterController;
 use App\Http\Controllers\API\PMTGuidelineController;
 use App\Http\Controllers\API\TblCcPhoneCollectionController;
@@ -226,6 +227,9 @@ Route::prefix('voice-call')->group(function () {
     Route::get('/logs', [VoiceCallController::class, 'getCallLogs']);
     Route::put('/logs/{id}', [VoiceCallController::class, 'updateCallLog']);
 });
+
+// Collection Logs Route
+Route::get('/collection-logs/{contractId}', [CollectionLogController::class, 'getCollectionLogs']);
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {

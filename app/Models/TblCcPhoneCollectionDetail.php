@@ -178,7 +178,7 @@ class TblCcPhoneCollectionDetail extends Model
      */
     public function creator()
     {
-        return $this->belongsTo(User::class, 'createdBy', 'id');
+        return $this->belongsTo(User::class, 'createdBy', 'authUserId');
     }
 
     /**
