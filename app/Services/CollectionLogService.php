@@ -413,12 +413,17 @@ class CollectionLogService
             ],
 
             'images' => collect($journal['images'] ?? [])->map(function ($image) {
+                // ✅ Combine domain + path for full URL
+                $localUrl = !empty($image['journalImageDomain']) && !empty($image['journalImagePath'])
+                    ? rtrim($image['journalImageDomain'], '/') . '/' . ltrim($image['journalImagePath'], '/')
+                    : $image['journalImagePath'];
+
                 return [
                     'imageId' => $image['journalImageId'],
                     'imageType' => $image['journalImageType'],
                     'fileName' => basename($image['journalImagePath']),
                     'fileType' => $image['journalImageExtension'],
-                    'localUrl' => $image['journalImagePath'],
+                    'localUrl' => $localUrl,  // ✅ Full URL: https://app-be.r2omm.xyz/public/uploads/...
                     'googleUrl' => $image['journalImageGGDrivePath'],
                     'createdAt' => null,
                 ];
