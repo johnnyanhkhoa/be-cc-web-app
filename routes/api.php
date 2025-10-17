@@ -6,6 +6,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CollectionLogController;
 use App\Http\Controllers\API\DutyRosterController;
 use App\Http\Controllers\API\PMTGuidelineController;
+use App\Http\Controllers\API\TblCcCustomerPhoneController;
 use App\Http\Controllers\API\TblCcPhoneCollectionController;
 use App\Http\Controllers\API\TblCcPhoneCollectionDetailController;
 use App\Http\Controllers\API\TblCcReasonController;
@@ -230,6 +231,11 @@ Route::prefix('voice-call')->group(function () {
 
 // Collection Logs Route
 Route::get('/collection-logs/{contractId}', [CollectionLogController::class, 'getCollectionLogs']);
+
+// Customer Phone Contact Routes
+Route::prefix('customer-phones')->group(function () {
+    Route::post('/', [TblCcCustomerPhoneController::class, 'store']);
+});
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
