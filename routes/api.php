@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CollectionLogController;
+use App\Http\Controllers\API\ContactPhoneController;
 use App\Http\Controllers\API\DutyRosterController;
 use App\Http\Controllers\API\PMTGuidelineController;
 use App\Http\Controllers\API\TblCcCustomerPhoneController;
@@ -232,9 +233,12 @@ Route::prefix('voice-call')->group(function () {
 // Collection Logs Route
 Route::get('/collection-logs/{contractId}', [CollectionLogController::class, 'getCollectionLogs']);
 
-// Customer Phone Contact Routes
-Route::prefix('customer-phones')->group(function () {
-    Route::post('/', [TblCcCustomerPhoneController::class, 'store']);
+// Contact Phones CRUD
+Route::prefix('customers/{customerId}/phones')->group(function () {
+    Route::get('/', [ContactPhoneController::class, 'index']); // GET all phones
+    Route::post('/', [ContactPhoneController::class, 'store']); // CREATE new phone
+    Route::post('/{phoneId}', [ContactPhoneController::class, 'update']); // UPDATE phone
+    Route::delete('/{phoneId}', [ContactPhoneController::class, 'destroy']); // DELETE phone
 });
 
 // // Protected Routes (TODO: Add JWT middleware)
