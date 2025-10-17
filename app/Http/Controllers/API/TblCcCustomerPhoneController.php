@@ -27,6 +27,7 @@ class TblCcCustomerPhoneController extends Controller
                 'phone_no' => $validated['phoneNo'] ?? null,
                 'customer_name' => $validated['customerName'] ?? null,
                 'contact_type' => $validated['contactType'] ?? null,
+                'contact_type_detail' => $validated['contactTypeDetail'] ?? null, // ✅ ADDED
                 'created_by' => $validated['createdBy'],
             ]);
 
@@ -34,7 +35,7 @@ class TblCcCustomerPhoneController extends Controller
 
             // ✅ Create instance và tắt timestamps
             $customerPhone = new TblCcCustomerPhone();
-            $customerPhone->timestamps = false; // Tắt auto timestamps
+            $customerPhone->timestamps = false;
 
             // Set data
             foreach ($validated as $key => $value) {
@@ -43,7 +44,6 @@ class TblCcCustomerPhoneController extends Controller
 
             // Set createdAt manually
             $customerPhone->createdAt = now();
-            // updatedAt sẽ là NULL
 
             $customerPhone->save();
 
@@ -55,8 +55,8 @@ class TblCcCustomerPhoneController extends Controller
             Log::info('Customer phone created successfully', [
                 'phone_id' => $customerPhone->phoneId,
                 'phone_no' => $customerPhone->phoneNo,
-                'created_at' => $customerPhone->createdAt,
-                'updated_at' => $customerPhone->updatedAt, // Will be NULL
+                'contact_type' => $customerPhone->contactType,
+                'contact_type_detail' => $customerPhone->contactTypeDetail, // ✅ ADDED
             ]);
 
             return response()->json([
@@ -70,6 +70,7 @@ class TblCcCustomerPhoneController extends Controller
                     'refereeId' => $customerPhone->refereeId,
                     'phoneNo' => $customerPhone->phoneNo,
                     'contactType' => $customerPhone->contactType,
+                    'contactTypeDetail' => $customerPhone->contactTypeDetail, // ✅ ADDED
                     'phoneStatus' => $customerPhone->phoneStatus,
                     'phoneType' => $customerPhone->phoneType,
                     'isPrimary' => $customerPhone->isPrimary,
@@ -79,7 +80,7 @@ class TblCcCustomerPhoneController extends Controller
                     'phoneCollectionId' => $customerPhone->phoneCollectionId,
                     'createdAt' => $customerPhone->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'createdBy' => $customerPhone->createdBy,
-                    'updatedAt' => $customerPhone->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'), // Will be null
+                    'updatedAt' => $customerPhone->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatedBy' => $customerPhone->updatedBy,
                 ]
             ], 201);

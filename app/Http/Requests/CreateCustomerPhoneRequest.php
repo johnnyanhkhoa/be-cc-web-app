@@ -5,7 +5,6 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use App\Models\TblCcCustomerPhone;
 
 class CreateCustomerPhoneRequest extends FormRequest
 {
@@ -36,8 +35,9 @@ class CreateCustomerPhoneRequest extends FormRequest
             'phoneNo' => ['nullable', 'string', 'max:20'],
             'customerName' => ['nullable', 'string', 'max:255'],
 
-            // Contact details
-            'contactType' => ['nullable', 'string', 'in:rpc,tpc,rb'],
+            // Contact details - ✅ NO RESTRICTION on contactType
+            'contactType' => ['nullable', 'string', 'max:50'], // ✅ Accept any string
+            'contactTypeDetail' => ['nullable', 'string', 'max:255'], // ✅ ADDED
             'phoneStatus' => ['nullable', 'string', 'in:active,inactive,wrong,disconnected'],
             'phoneType' => ['nullable', 'string', 'in:mobile,landline'],
 
@@ -73,7 +73,10 @@ class CreateCustomerPhoneRequest extends FormRequest
             'customerName.string' => 'Customer name must be a valid string',
             'customerName.max' => 'Customer name cannot exceed 255 characters',
 
-            'contactType.in' => 'Contact type must be one of: rpc, tpc, rb',
+            'contactType.string' => 'Contact type must be a valid string',
+            'contactType.max' => 'Contact type cannot exceed 50 characters',
+            'contactTypeDetail.string' => 'Contact type detail must be a valid string',
+            'contactTypeDetail.max' => 'Contact type detail cannot exceed 255 characters',
             'phoneStatus.in' => 'Phone status must be one of: active, inactive, wrong, disconnected',
             'phoneType.in' => 'Phone type must be one of: mobile, landline',
 

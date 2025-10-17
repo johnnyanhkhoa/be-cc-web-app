@@ -36,6 +36,7 @@ class TblCcCustomerPhone extends Model
         'refereeId',
         'phoneNo',
         'contactType',
+        'contactTypeDetail', // ✅ ADDED
         'phoneStatus',
         'phoneType',
         'isPrimary',
@@ -89,13 +90,6 @@ class TblCcCustomerPhone extends Model
     const DELETED_AT = 'deletedAt';
 
     /**
-     * Contact type constants
-     */
-    const CONTACT_TYPE_RPC = 'rpc';
-    const CONTACT_TYPE_TPC = 'tpc';
-    const CONTACT_TYPE_RB = 'rb';
-
-    /**
      * Phone status constants
      */
     const PHONE_STATUS_ACTIVE = 'active';
@@ -108,18 +102,6 @@ class TblCcCustomerPhone extends Model
      */
     const PHONE_TYPE_MOBILE = 'mobile';
     const PHONE_TYPE_LANDLINE = 'landline';
-
-    /**
-     * Get all available contact types
-     */
-    public static function getContactTypes(): array
-    {
-        return [
-            self::CONTACT_TYPE_RPC,
-            self::CONTACT_TYPE_TPC,
-            self::CONTACT_TYPE_RB,
-        ];
-    }
 
     /**
      * Get all available phone statuses
