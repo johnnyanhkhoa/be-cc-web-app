@@ -30,21 +30,64 @@ class CollectionLogService
         // Step 1: Get phone collection details
         $phoneCollectionLogs = $this->getPhoneCollectionLogs($contractId, $fromDate, $toDate);
 
+        // 🔥 DEBUG LOG
+        Log::info('After getPhoneCollectionLogs', [
+            'type' => gettype($phoneCollectionLogs),
+            'class' => get_class($phoneCollectionLogs),
+            'is_collection' => $phoneCollectionLogs instanceof Collection,
+            'is_null' => is_null($phoneCollectionLogs),
+            'count' => $phoneCollectionLogs ? $phoneCollectionLogs->count() : 'null',
+        ]);
+
+        // 🔥 FIX: Ensure it's always a Collection, never null
+        if (!$phoneCollectionLogs || !($phoneCollectionLogs instanceof Collection)) {
+            $phoneCollectionLogs = collect([]);
+        }
+
         // Step 2: Get litigation journals
         $litigationLogs = $this->getLitigationJournals($contractId, $fromDate, $toDate);
 
+        // 🔥 DEBUG LOG
+        Log::info('After getLitigationJournals', [
+            'type' => gettype($litigationLogs),
+            'class' => is_object($litigationLogs) ? get_class($litigationLogs) : 'not_object',
+            'is_collection' => $litigationLogs instanceof Collection,
+            'is_null' => is_null($litigationLogs),
+            'count' => $litigationLogs ? (method_exists($litigationLogs, 'count') ? $litigationLogs->count() : 'no_count_method') : 'null',
+        ]);
+
+        // 🔥 FIX: Ensure it's always a Collection, never null
+        if (!$litigationLogs || !($litigationLogs instanceof Collection)) {
+            $litigationLogs = collect([]);
+        }
+
+        // 🔥 DEBUG LOG BEFORE MERGE
+        Log::info('Before merge', [
+            'phoneCollectionLogs_type' => get_class($phoneCollectionLogs),
+            'phoneCollectionLogs_count' => $phoneCollectionLogs->count(),
+            'litigationLogs_type' => get_class($litigationLogs),
+            'litigationLogs_count' => $litigationLogs->count(),
+        ]);
+
         // ✅ Step 2.5: Enrich litigation with contract info from phone collection
         if ($phoneCollectionLogs->isNotEmpty() && $litigationLogs->isNotEmpty()) {
+
+        $firstPhoneLog = $phoneCollectionLogs->first();
+
+        // 🔥 CHECK: Make sure first() returns an array with expected keys
+        if (is_array($firstPhoneLog) && isset($firstPhoneLog['contractNo'])) {
             // Get contract info from first phone collection log
             $contractInfo = [
-                'contractNo' => $phoneCollectionLogs->first()['contractNo'] ?? null,
-                'customerFullName' => $phoneCollectionLogs->first()['customerFullName'] ?? null,
+                'contractNo' => $firstPhoneLog['contractNo'] ?? null,
+                'customerFullName' => $firstPhoneLog['customerFullName'] ?? null,
             ];
 
             // Enrich each litigation log
             $litigationLogs = $litigationLogs->map(function ($log) use ($contractInfo) {
-                $log['contractNo'] = $contractInfo['contractNo'];
-                $log['customerFullName'] = $contractInfo['customerFullName'];
+                if (is_array($log)) {
+                    $log['contractNo'] = $contractInfo['contractNo'];
+                    $log['customerFullName'] = $contractInfo['customerFullName'];
+                }
                 return $log;
             });
 
@@ -52,12 +95,34 @@ class CollectionLogService
                 'contract_no' => $contractInfo['contractNo'],
                 'customer_name' => $contractInfo['customerFullName'],
             ]);
+        } else {
+            Log::warning('Cannot enrich litigation logs - invalid phone collection data structure', [
+                'first_item_type' => gettype($firstPhoneLog),
+                'first_item' => $firstPhoneLog,
+            ]);
         }
+    }
 
         // Step 3: Merge and sort
-        $unifiedLogs = $phoneCollectionLogs->merge($litigationLogs)
-            ->sortByDesc('timestamp')
-            ->values();
+        Log::info('About to merge collections');
+
+        try {
+            $unifiedLogs = $phoneCollectionLogs->merge($litigationLogs)
+                ->sortByDesc('timestamp')
+                ->values();
+
+            Log::info('Merge successful', [
+                'unified_count' => $unifiedLogs->count(),
+            ]);
+        } catch (Exception $e) {
+            Log::error('❌ MERGE FAILED', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'phoneCollectionLogs_dump' => print_r($phoneCollectionLogs, true),
+                'litigationLogs_dump' => print_r($litigationLogs, true),
+            ]);
+            throw $e;
+        }
 
         Log::info('Collection logs merged and sorted', [
             'total' => $unifiedLogs->count(),
@@ -95,7 +160,7 @@ class CollectionLogService
 
             if (empty($phoneCollectionIds)) {
                 Log::info('No phone collections found for contract', ['contract_id' => $contractId]);
-                return collect();
+                return collect([]);
             }
 
             // ✅ Eager load creator relationship
@@ -117,16 +182,19 @@ class CollectionLogService
             ]);
 
             // Transform to unified format
-            return $details->map(function ($detail) {
+            $transformed = $details->map(function ($detail) {
                 return $this->transformPhoneCollectionDetail($detail);
             });
+
+            // 🔥 FIX: Convert Eloquent Collection to Support Collection
+            return collect($transformed->toArray());
 
         } catch (Exception $e) {
             Log::error('Failed to get phone collection logs', [
                 'contract_id' => $contractId,
                 'error' => $e->getMessage(),
             ]);
-            return collect();
+            return collect([]);
         }
     }
 
@@ -141,7 +209,8 @@ class CollectionLogService
     protected function getLitigationJournals(int $contractId, string $fromDate, string $toDate): Collection
     {
         try {
-            $url = "https://maximus.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
+            // $url = "https://maximus.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
+            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
 
             Log::info('Calling Maximus API for litigation journals', [
                 'url' => $url,
@@ -161,14 +230,14 @@ class CollectionLogService
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
-                return collect();
+                return collect([]);
             }
 
             $data = $response->json();
 
             if (!isset($data['status']) || $data['status'] != 1) {
                 Log::error('Maximus API returned error status', ['data' => $data]);
-                return collect();
+                return collect([]);
             }
 
             $journals = $data['data'] ?? [];
@@ -218,7 +287,7 @@ class CollectionLogService
                 'output_count' => $transformed->count(),
             ]);
 
-            return $transformed;
+            return collect($transformed);
 
         } catch (Exception $e) {
             Log::error('Failed to get litigation journals', [
@@ -226,7 +295,7 @@ class CollectionLogService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return collect();
+            return collect([]);
         }
     }
 
