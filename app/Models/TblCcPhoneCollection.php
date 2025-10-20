@@ -141,4 +141,12 @@ class TblCcPhoneCollection extends Model
     {
         return $this->belongsTo(TblCcBatch::class, 'batchId', 'batchId');
     }
+
+    /**
+     * Scope to filter by assignedAt date
+     */
+    public function scopeByAssignedAt($query, $assignedAt)
+    {
+        return $query->whereDate('assignedAt', $assignedAt);
+    }
 }

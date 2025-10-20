@@ -202,6 +202,20 @@ class TblCcPhoneCollectionController extends Controller
                 $query->byAssignedTo($request->assignedTo);
             }
 
+            // Filter by assignedAt date if provided
+            if ($request->has('assignedAt') && !empty($request->assignedAt)) {
+                // Validate date format
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->assignedAt)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid date format for assignedAt',
+                        'error' => 'Date must be in Y-m-d format (e.g., 2025-01-15)'
+                    ], 400);
+                }
+
+                $query->byAssignedAt($request->assignedAt);
+            }
+
             // Sorting
             $sortBy = $request->get('sort_by', 'createdAt');
             $sortOrder = $request->get('sort_order', 'desc');
