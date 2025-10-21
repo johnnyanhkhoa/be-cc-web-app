@@ -6,6 +6,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CollectionLogController;
 use App\Http\Controllers\API\ContactPhoneController;
 use App\Http\Controllers\API\DutyRosterController;
+use App\Http\Controllers\API\PenaltyFeeController;
 use App\Http\Controllers\API\PMTGuidelineController;
 use App\Http\Controllers\API\TblCcCustomerPhoneController;
 use App\Http\Controllers\API\TblCcPhoneCollectionController;
@@ -240,6 +241,18 @@ Route::prefix('customers/{customerId}/phones')->group(function () {
     Route::post('/{phoneId}', [ContactPhoneController::class, 'update']); // UPDATE phone
     Route::delete('/{phoneId}', [ContactPhoneController::class, 'destroy']); // DELETE phone
 });
+
+// Penalty Fee & Litigation Transfer Routes
+Route::prefix('penalty-fee')->group(function () {
+    // Get penalty fee info by phoneCollectionId
+    Route::get('/{phoneCollectionId}', [PenaltyFeeController::class, 'getPenaltyFeeInfo']);
+
+    // Exempt penalty fee by phoneCollectionId
+    Route::post('/{phoneCollectionId}/exempt', [PenaltyFeeController::class, 'exemptPenaltyFee']);
+});
+
+// Contract Litigation Transfer Route
+Route::post('/contracts/{phoneCollectionId}/transfer-litigation', [PenaltyFeeController::class, 'transferToLitigation']);
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
