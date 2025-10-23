@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Call;
+use App\Models\TblCcPhoneCollection;
 use App\Models\User;
 use App\Models\DutyRoster;
 use Illuminate\Console\Command;
@@ -32,23 +32,29 @@ class AssignDailyCalls extends Command
      */
     public function handle(): int
     {
+        // Increase timeout and memory for large datasets
+        set_time_limit(600); // 10 minutes
+        ini_set('memory_limit', '512M');
+
         try {
             $assignmentDate = $this->option('date') ?? Carbon::today()->toDateString();
 
             $this->info("Starting daily call assignment for date: {$assignmentDate}");
             $this->info('='.str_repeat('=', 60));
 
-            // Get assigner user (first user)
-            $assignedBy = User::first()?->id;
+            // Get assigner user authUserId (first user)
+            $assignedBy = User::first()?->authUserId;
 
             if (!$assignedBy) {
                 $this->error('No users found in system. Please create at least one user first.');
                 return self::FAILURE;
             }
 
+            $this->info("Assigned by: User with authUserId = {$assignedBy}");
+
             DB::beginTransaction();
 
-            // Step 1: Get available agents
+            // Step 1: Get available agents from duty roster
             $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate);
 
             if ($availableAgents->isEmpty()) {
@@ -59,27 +65,25 @@ class AssignDailyCalls extends Command
 
             $this->info("Found {$availableAgents->count()} available agents:");
             foreach ($availableAgents as $agent) {
-                $this->line("  - {$agent['user_full_name']} (ID: {$agent['id']})");
+                $this->line("  - {$agent->userFullName} (authUserId: {$agent->authUserId})");
             }
 
-            // Step 2: Get calls to assign
-            $callsToAssign = Call::where('status', '!=', Call::STATUS_COMPLETED)
-                ->orderBy('created_at', 'asc')
+            // Step 2: Get phone collections to assign (only unassigned, not completed)
+            $callsToAssign = TblCcPhoneCollection::where('status', '!=', 'completed')
+                ->whereNull('assignedTo')
+                ->orderBy('createdAt', 'asc')
                 ->get();
 
             if ($callsToAssign->isEmpty()) {
-                $this->warn('No calls available for assignment - all calls are completed.');
+                $this->warn('No phone collections available for assignment.');
+                $this->warn('All phone collections are either completed or already assigned.');
                 return self::SUCCESS;
             }
 
-            $this->info("Found {$callsToAssign->count()} calls to assign");
+            $this->info("Found {$callsToAssign->count()} phone collections to assign");
 
-            // Step 3: Reset all calls to unassigned
-            $this->info('Resetting all calls to unassigned status...');
-            $this->resetCallsToUnassigned($callsToAssign, $assignedBy);
-
-            // Step 4: Perform round-robin assignment
-            $this->info('Performing round-robin call assignment...');
+            // Step 3: Perform round-robin assignment
+            $this->info('Performing round-robin assignment...');
             $bar = $this->output->createProgressBar($callsToAssign->count());
             $bar->start();
 
@@ -96,13 +100,14 @@ class AssignDailyCalls extends Command
 
             DB::commit();
 
-            // Step 5: Display results
+            // Step 4: Display results
             $this->displayAssignmentResults($assignments, $availableAgents);
 
             Log::info('Daily call assignment completed via command', [
                 'assignment_date' => $assignmentDate,
-                'total_calls' => $callsToAssign->count(),
+                'total_phone_collections' => $callsToAssign->count(),
                 'total_agents' => $availableAgents->count(),
+                'assigned_by_auth_user_id' => $assignedBy,
                 'command_user' => 'system'
             ]);
 
@@ -125,26 +130,16 @@ class AssignDailyCalls extends Command
     }
 
     /**
-     * Reset calls to unassigned status
-     */
-    private function resetCallsToUnassigned($calls, int $updatedBy): void
-    {
-        $callIds = $calls->pluck('id')->toArray();
-
-        Call::whereIn('id', $callIds)->update([
-            'assigned_to' => null,
-            'assigned_by' => null,
-            'assigned_at' => null,
-            'status' => Call::STATUS_PENDING,
-            'updated_by' => $updatedBy,
-            'updated_at' => now(),
-        ]);
-    }
-
-    /**
      * Perform round-robin assignment
+     *
+     * @param \Illuminate\Support\Collection $calls
+     * @param \Illuminate\Support\Collection $agents
+     * @param string $assignedBy authUserId
+     * @param string $assignmentDate
+     * @param mixed $progressBar
+     * @return array
      */
-    private function performRoundRobinAssignment($calls, $agents, int $assignedBy, string $assignmentDate, $progressBar = null): array
+    private function performRoundRobinAssignment($calls, $agents, string $assignedBy, string $assignmentDate, $progressBar = null): array
     {
         $assignments = [];
         $agentIndex = 0;
@@ -154,19 +149,21 @@ class AssignDailyCalls extends Command
         foreach ($calls as $index => $call) {
             $currentAgent = $agentsArray[$agentIndex];
 
-            // Update call with assignment
+            // Update phone collection with assignment
             $call->update([
-                'assigned_to' => $currentAgent['id'],
-                'assigned_by' => $assignedBy,
-                'assigned_at' => now(),
-                'status' => Call::STATUS_ASSIGNED,
-                'updated_by' => $assignedBy,
+                'assignedTo' => $currentAgent['authUserId'],
+                'assignedBy' => $assignedBy,
+                'assignedAt' => now(),
+                'updatedBy' => $assignedBy,
             ]);
 
             $assignments[] = [
-                'call_id' => $call->call_id,
-                'agent_id' => $currentAgent['id'],
-                'agent_name' => $currentAgent['user_full_name'],
+                'phoneCollectionId' => $call->phoneCollectionId,
+                'contractId' => $call->contractId,
+                'contractNo' => $call->contractNo,
+                'customerFullName' => $call->customerFullName,
+                'agent_auth_user_id' => $currentAgent['authUserId'],
+                'agent_name' => $currentAgent['userFullName'],
                 'sequence' => $index + 1
             ];
 
@@ -184,6 +181,10 @@ class AssignDailyCalls extends Command
 
     /**
      * Display assignment results in a nice table format
+     *
+     * @param array $assignments
+     * @param \Illuminate\Support\Collection $agents
+     * @return void
      */
     private function displayAssignmentResults(array $assignments, $agents): void
     {
@@ -191,31 +192,35 @@ class AssignDailyCalls extends Command
         $this->info('📊 Assignment Results:');
         $this->info('-'.str_repeat('-', 60));
 
-        // Calculate summary by agent
+        // Calculate summary by agent using authUserId
         $summary = [];
         foreach ($agents as $agent) {
-            $summary[$agent['id']] = [
-                'name' => $agent['user_full_name'],
+            $summary[$agent->authUserId] = [
+                'name' => $agent->userFullName,
                 'count' => 0
             ];
         }
 
+        // Count assignments per agent
         foreach ($assignments as $assignment) {
-            $summary[$assignment['agent_id']]['count']++;
+            $authUserId = $assignment['agent_auth_user_id'];
+            if (isset($summary[$authUserId])) {
+                $summary[$authUserId]['count']++;
+            }
         }
 
         // Display summary table
         $tableData = [];
-        foreach ($summary as $agentId => $data) {
+        foreach ($summary as $authUserId => $data) {
             $tableData[] = [
-                'Agent ID' => $agentId,
+                'Auth User ID' => $authUserId,
                 'Agent Name' => $data['name'],
                 'Calls Assigned' => $data['count']
             ];
         }
 
         $this->table(
-            ['Agent ID', 'Agent Name', 'Calls Assigned'],
+            ['Auth User ID', 'Agent Name', 'Calls Assigned'],
             $tableData
         );
 

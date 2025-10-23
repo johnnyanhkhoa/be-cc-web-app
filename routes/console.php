@@ -11,6 +11,7 @@ Artisan::command('inspire', function () {
 // Schedule auto call assignment daily at 7:00 AM
 Schedule::command('calls:assign-daily')
     ->dailyAt('07:00')
+    ->dailyAt('17:49')
     ->timezone('Asia/Ho_Chi_Minh')
     ->appendOutputTo(storage_path('logs/call-assignment.log'));
 

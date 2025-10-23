@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\DutyRoster;
 use App\Services\UserPermissionService;
+use App\Services\UserManagementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,9 +17,14 @@ class UserController extends Controller
 {
     protected $permissionService;
 
-    public function __construct(UserPermissionService $permissionService)
-    {
+    protected $userManagementService;
+
+    public function __construct(
+        UserPermissionService $permissionService,
+        UserManagementService $userManagementService
+    ) {
         $this->permissionService = $permissionService;
+        $this->userManagementService = $userManagementService;
     }
 
     /**
@@ -277,6 +283,67 @@ class UserController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ], 500);
+        }
+    }
+
+    /**
+     * Get eligible users for duty roster
+     * Users with call-processing permission and isActive = true
+     *
+     * GET /api/users/eligible-for-duty-roster
+     * GET /api/users/eligible-for-duty-roster?refresh=true (bypass cache)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getEligibleUsersForDutyRoster(Request $request): JsonResponse
+    {
+        try {
+            // Get access token from Authorization header
+            $authHeader = $request->header('Authorization');
+
+            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access token is required',
+                    'error' => 'Missing or invalid Authorization header'
+                ], 401);
+            }
+
+            $accessToken = substr($authHeader, 7);
+
+            // Check if refresh is requested (bypass cache)
+            $refresh = $request->query('refresh') === 'true';
+
+            Log::info('Get eligible users for duty roster', [
+                'refresh' => $refresh,
+            ]);
+
+            // Get users (with or without cache)
+            $users = $refresh
+                ? $this->userManagementService->refreshEligibleUsers($accessToken)
+                : $this->userManagementService->getEligibleUsersForDutyRoster($accessToken);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Eligible users retrieved successfully',
+                'data' => $users,
+                'total' => count($users),
+                'cached' => !$refresh,
+            ], 200);
+
+        } catch (Exception $e) {
+            $statusCode = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
+
+            Log::error('Failed to get eligible users', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get eligible users',
+                'error' => $e->getMessage(),
+            ], $statusCode);
         }
     }
 }

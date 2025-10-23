@@ -58,7 +58,9 @@ class CallAssignmentController extends Controller
 
             // Step 2: Get phone collections to assign (all except completed)
             $phoneCollectionsToAssign = TblCcPhoneCollection::where('status', '!=', 'completed')
+                ->whereNull('assignedTo')  // ← CHỈ lấy chưa assign
                 ->orderBy('createdAt', 'asc')
+                ->limit(100)
                 ->get();
 
             if ($phoneCollectionsToAssign->isEmpty()) {
@@ -68,9 +70,6 @@ class CallAssignmentController extends Controller
                     'error' => 'All phone collections are already completed'
                 ], 400);
             }
-
-            // Step 3: Reset all phone collections to unassigned (for clean reassignment)
-            $this->resetPhoneCollectionsToUnassigned($phoneCollectionsToAssign, $assignedBy);
 
             // Step 4: Perform round-robin assignment
             $assignmentResults = $this->performRoundRobinAssignment(

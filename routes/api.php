@@ -94,6 +94,10 @@ Route::prefix('call-assignments')->group(function () {
 
 // User Management Routes
 Route::prefix('users')->group(function () {
+    // Get eligible users for duty roster (with call-processing permission)
+    Route::get('/eligible-for-duty-roster', [UserController::class, 'getEligibleUsersForDutyRoster']);
+
+    // Existing route
     Route::get('/available-for-assign', [UserController::class, 'getAvailableUsersForAssign']);
 });
 

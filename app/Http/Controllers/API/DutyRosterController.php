@@ -94,24 +94,27 @@ class DutyRosterController extends Controller
             Log::info('Creating duty roster assignments', [
                 'start_date' => $validated['start_date'],
                 'end_date' => $validated['end_date'],
-                'agent_auth_user_ids' => $validated['agent_auth_user_ids']
+                'agent_auth_user_ids' => $validated['agent_auth_user_ids'],
+                'created_by_auth_user_id' => $validated['createdBy']
             ]);
 
             DB::beginTransaction();
 
             $startDate = Carbon::parse($validated['start_date']);
             $endDate = Carbon::parse($validated['end_date']);
-            $agentAuthUserIds = $validated['agent_auth_user_ids']; // authUserIds
+            $agentAuthUserIds = $validated['agent_auth_user_ids'];
+            $createdByAuthUserId = $validated['createdBy'];
 
-            // Get current user authUserId - use first available user if no auth
-            $firstUser = User::first();
-            $createdBy = $firstUser?->authUserId;
+            // ✅ Convert createdBy authUserId to local id
+            $creatorUser = User::where('authUserId', $createdByAuthUserId)->first();
 
-            if (!$createdBy) {
-                throw new Exception('No users found in system. Please create at least one user first.');
+            if (!$creatorUser) {
+                throw new Exception("Creator user with authUserId {$createdByAuthUserId} not found in database. Please ensure this user has logged in at least once.");
             }
 
-            // Convert authUserIds to local ids for DutyRoster table
+            $createdBy = $creatorUser->id; // Local id for foreign key
+
+            // Convert agent authUserIds to local ids for DutyRoster table
             $users = User::whereIn('authUserId', $agentAuthUserIds)->get();
             $authUserIdToLocalId = $users->pluck('id', 'authUserId')->toArray();
 
@@ -141,7 +144,7 @@ class DutyRosterController extends Controller
                             $existingDuty->restore();
                             $existingDuty->update([
                                 'is_working' => true,
-                                'created_by' => $createdBy,
+                                'created_by' => $createdBy, // ✅ Local id
                             ]);
 
                             $created[] = [
@@ -153,7 +156,7 @@ class DutyRosterController extends Controller
                             // Update existing active record
                             $existingDuty->update([
                                 'is_working' => true,
-                                'created_by' => $createdBy,
+                                'created_by' => $createdBy, // ✅ Local id
                             ]);
 
                             $created[] = [
@@ -168,7 +171,7 @@ class DutyRosterController extends Controller
                             'work_date' => $dateStr,
                             'user_id' => $localUserId,
                             'is_working' => true,
-                            'created_by' => $createdBy,
+                            'created_by' => $createdBy, // ✅ Local id
                         ]);
 
                         $created[] = [
