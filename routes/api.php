@@ -8,6 +8,7 @@ use App\Http\Controllers\API\ContactPhoneController;
 use App\Http\Controllers\API\DutyRosterController;
 use App\Http\Controllers\API\PenaltyFeeController;
 use App\Http\Controllers\API\PMTGuidelineController;
+use App\Http\Controllers\API\TblCcBatchController;
 use App\Http\Controllers\API\TblCcCustomerPhoneController;
 use App\Http\Controllers\API\TblCcPhoneCollectionController;
 use App\Http\Controllers\API\TblCcPhoneCollectionDetailController;
@@ -257,6 +258,12 @@ Route::prefix('penalty-fee')->group(function () {
 
 // Contract Litigation Transfer Route
 Route::post('/contracts/{phoneCollectionId}/transfer-litigation', [PenaltyFeeController::class, 'transferToLitigation']);
+
+// Batch API Routes
+Route::prefix('cc-batches')->group(function () {
+    // Get all batches
+    Route::get('/', [TblCcBatchController::class, 'index']);
+});
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
