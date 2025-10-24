@@ -139,10 +139,9 @@ class DutyRoster extends Model
             $dateStr = $current->toDateString();
             $agents = $groupedDuties->get($dateStr, collect())->map(function ($duty) {
                 return [
-                    'authUserId' => $duty->user->authUserId,  // Đổi từ user_id sang authUserId
-                    'name' => $duty->user->user_full_name,
+                    'authUserId' => $duty->user->authUserId,
+                    'userFullName' => $duty->user->userFullName, // ✅ ĐỔI TÊN
                     'email' => $duty->user->email,
-                    'username' => $duty->user->username,
                 ];
             });
 
