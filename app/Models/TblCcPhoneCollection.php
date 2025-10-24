@@ -147,6 +147,12 @@ class TblCcPhoneCollection extends Model
      */
     public function scopeByAssignedAt($query, $assignedAt)
     {
-        return $query->whereDate('assignedAt', $assignedAt);
+        // Query: assignedAt=2025-10-24
+        // Nghĩa là: lấy tất cả records mà khi convert sang Asia/Yangon thì DATE = 2025-10-24
+
+        return $query->whereRaw(
+            "DATE(\"assignedAt\" AT TIME ZONE 'Asia/Yangon') = ?",
+            [$assignedAt]
+        );
     }
 }
