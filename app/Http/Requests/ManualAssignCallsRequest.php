@@ -24,7 +24,7 @@ class ManualAssignCallsRequest extends FormRequest
         return [
             'assignedBy' => ['required', 'integer', 'min:1', 'exists:users,authUserId'], // Đổi từ id → authUserId
             'assignTo' => ['required', 'integer', 'min:1', 'exists:users,authUserId'],   // Đổi từ id → authUserId
-            'phoneCollectionIds' => ['required', 'array', 'min:1', 'max:100'],
+            'phoneCollectionIds' => ['required', 'array', 'min:1', 'max:1000'],
             'phoneCollectionIds.*' => ['required', 'integer', 'exists:tbl_CcPhoneCollection,phoneCollectionId'],
         ];
     }
@@ -42,7 +42,7 @@ class ManualAssignCallsRequest extends FormRequest
             'phoneCollectionIds.required' => 'Phone collection IDs are required',
             'phoneCollectionIds.array' => 'Phone collection IDs must be an array',
             'phoneCollectionIds.min' => 'At least one phone collection ID is required',
-            'phoneCollectionIds.max' => 'Maximum 100 phone collections can be assigned at once',
+            'phoneCollectionIds.max' => 'Maximum 1000 phone collections can be assigned at once',
             'phoneCollectionIds.*.required' => 'Each phone collection ID is required',
             'phoneCollectionIds.*.integer' => 'Each phone collection ID must be an integer',
             'phoneCollectionIds.*.exists' => 'One or more phone collection IDs do not exist',
