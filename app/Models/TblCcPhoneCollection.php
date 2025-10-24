@@ -68,6 +68,8 @@ class TblCcPhoneCollection extends Model
         'deletedReason',
         'batchId',
         'riskType',
+        'completedBy',
+        'completedAt',
     ];
 
     /**
@@ -95,6 +97,7 @@ class TblCcPhoneCollection extends Model
         'totalAmount' => 'integer',
         'amountPaid' => 'integer',
         'amountUnpaid' => 'integer',
+        'completedAt' => 'datetime',
     ];
 
     /**

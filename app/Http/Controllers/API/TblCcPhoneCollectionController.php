@@ -305,6 +305,13 @@ class TblCcPhoneCollectionController extends Controller
     public function markAsCompleted(Request $request, int $phoneCollectionId): JsonResponse
     {
         try {
+            // Validate request
+            $request->validate([
+                'completedBy' => ['required', 'integer', 'exists:users,authUserId'],
+            ]);
+
+            $completedByAuthUserId = $request->input('completedBy');
+
             // Validate phoneCollectionId
             if ($phoneCollectionId <= 0) {
                 return response()->json([
@@ -315,7 +322,8 @@ class TblCcPhoneCollectionController extends Controller
             }
 
             Log::info('Marking phone collection as completed', [
-                'phone_collection_id' => $phoneCollectionId
+                'phone_collection_id' => $phoneCollectionId,
+                'completed_by_auth_user_id' => $completedByAuthUserId,
             ]);
 
             // Find phone collection record
@@ -343,29 +351,45 @@ class TblCcPhoneCollectionController extends Controller
                         'status' => $phoneCollection->status,
                         'contractId' => $phoneCollection->contractId,
                         'customerFullName' => $phoneCollection->customerFullName,
+                        'completedBy' => $phoneCollection->completedBy,
+                        'completedAt' => $phoneCollection->completedAt?->format('Y-m-d H:i:s'),
                         'updatedAt' => $phoneCollection->updatedAt?->format('Y-m-d H:i:s'),
                     ]
                 ], 200);
             }
 
-            // Get current user ID (TODO: replace with actual authenticated user)
-            $updatedBy = $request->input('updatedBy', 1);
+            // Verify user exists
+            $completedByUser = User::where('authUserId', $completedByAuthUserId)->first();
+
+            if (!$completedByUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'error' => "User with authUserId {$completedByAuthUserId} does not exist"
+                ], 404);
+            }
 
             // Store previous status for logging
             $previousStatus = $phoneCollection->status;
 
+            // Get current time in Myanmar timezone (UTC+6:30)
+            $myanmarTime = now()->timezone('Asia/Yangon');
+
             // Update status to completed
             $phoneCollection->update([
                 'status' => 'completed',
-                'updatedBy' => $updatedBy,
-                'updatedAt' => now(),
+                'completedBy' => $completedByAuthUserId, // ✅ Keep authUserId
+                'completedAt' => $myanmarTime,
+                'updatedBy' => $completedByAuthUserId,   // ✅ Keep authUserId
+                'updatedAt' => $myanmarTime,
             ]);
 
             Log::info('Phone collection marked as completed successfully', [
                 'phone_collection_id' => $phoneCollectionId,
                 'previous_status' => $previousStatus,
                 'new_status' => 'completed',
-                'updated_by' => $updatedBy,
+                'completed_by_auth_user_id' => $completedByAuthUserId,
+                'completed_at' => $myanmarTime->format('Y-m-d H:i:s'),
                 'contract_id' => $phoneCollection->contractId,
                 'customer_name' => $phoneCollection->customerFullName,
             ]);
@@ -385,8 +409,10 @@ class TblCcPhoneCollectionController extends Controller
                     'amountUnpaid' => $phoneCollection->amountUnpaid,
                     'totalAttempts' => $phoneCollection->totalAttempts,
                     'lastAttemptAt' => $phoneCollection->lastAttemptAt?->format('Y-m-d H:i:s'),
+                    'completedBy' => $phoneCollection->completedBy, // authUserId
+                    'completedAt' => $phoneCollection->completedAt?->format('Y-m-d H:i:s'),
                     'updatedAt' => $phoneCollection->updatedAt?->format('Y-m-d H:i:s'),
-                    'updatedBy' => $phoneCollection->updatedBy,
+                    'updatedBy' => $phoneCollection->updatedBy, // authUserId
                 ]
             ], 200);
 
