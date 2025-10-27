@@ -70,6 +70,7 @@ class TblCcPhoneCollection extends Model
         'riskType',
         'completedBy',
         'completedAt',
+        'hasKYCAppAccount',
     ];
 
     /**
@@ -98,6 +99,7 @@ class TblCcPhoneCollection extends Model
         'amountPaid' => 'integer',
         'amountUnpaid' => 'integer',
         'completedAt' => 'datetime',
+        'hasKYCAppAccount' => 'boolean',
     ];
 
     /**

@@ -215,6 +215,7 @@ class PhoneCollectionSyncService
                     'totalAmount' => $contract['totalAmount'],
                     'amountPaid' => $contract['amountPaid'],
                     'amountUnpaid' => $contract['amountUnpaid'],
+                    'hasKYCAppAccount' => $contract['hasKYCAppAccount'] ?? false,
 
                     // Segment and batch info
                     'segmentType' => $segmentType,
