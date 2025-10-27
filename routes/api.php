@@ -265,6 +265,21 @@ Route::prefix('cc-batches')->group(function () {
     Route::get('/', [TblCcBatchController::class, 'index']);
 });
 
+// Reschedule Routes
+Route::prefix('reschedule')->group(function () {
+    // Get proposed schedules
+    Route::get('/{phoneCollectionId}/proposed-schedules', [App\Http\Controllers\API\RescheduleController::class, 'getProposedSchedules']);
+
+    // Post reschedule
+    Route::post('/{phoneCollectionId}', [App\Http\Controllers\API\RescheduleController::class, 'postReschedule']);
+
+    // Get signature link
+    Route::get('/{phoneCollectionId}/signature-link', [App\Http\Controllers\API\RescheduleController::class, 'getSignatureLink']);
+
+    // Create signature link
+    Route::post('/{phoneCollectionId}/signature-link', [App\Http\Controllers\API\RescheduleController::class, 'createSignatureLink']);
+});
+
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
 //     Route::prefix('auth')->group(function () {
