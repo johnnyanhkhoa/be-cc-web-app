@@ -262,7 +262,13 @@ Route::post('/contracts/{phoneCollectionId}/transfer-litigation', [PenaltyFeeCon
 // Batch API Routes
 Route::prefix('cc-batches')->group(function () {
     // Get all batches
-    Route::get('/', [TblCcBatchController::class, 'index']);
+    Route::get('/', [App\Http\Controllers\API\TblCcBatchController::class, 'index']);
+
+    // Get batch by ID
+    Route::get('/{batchId}', [App\Http\Controllers\API\TblCcBatchController::class, 'show']);
+
+    // Update batch
+    Route::patch('/', [App\Http\Controllers\API\TblCcBatchController::class, 'update']);
 });
 
 // Reschedule Routes
