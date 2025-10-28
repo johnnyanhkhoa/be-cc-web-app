@@ -246,7 +246,7 @@ class TblCcPhoneCollectionController extends Controller
                     'status' => $pc->status,
                     'assignedTo' => $pc->assignedTo,
                     'assignedBy' => $pc->assignedBy,
-                    'assignedAt' => $pc->assignedAt?->format('Y-m-d H:i:s'),
+                    'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'totalAttempts' => $pc->totalAttempts,
                     'lastAttemptAt' => $pc->lastAttemptAt?->format('Y-m-d H:i:s'),
                     'lastAttemptBy' => $pc->lastAttemptBy,
@@ -520,7 +520,7 @@ class TblCcPhoneCollectionController extends Controller
                         'username' => $assignedByUser->username,
                         'userFullName' => $assignedByUser->userFullName,
                     ],
-                    'assignedAt' => $pc->assignedAt?->format('Y-m-d H:i:s'),
+                    'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'sequence' => $index + 1
                 ];
             });
