@@ -72,6 +72,7 @@ class ContactPhoneController extends Controller
                 'phoneRemark' => 'nullable|string',
                 'isPrimary' => 'required|boolean',
                 'isViber' => 'required|boolean',
+                'userCreated' => 'required|string|max:100',
             ]);
 
             if ($validator->fails()) {
@@ -127,6 +128,7 @@ class ContactPhoneController extends Controller
                 'phoneRemark' => 'nullable|string',
                 'isPrimary' => 'required|boolean',
                 'isViber' => 'required|boolean',
+                'userUpdated' => 'required|string|max:100',
             ]);
 
             if ($validator->fails()) {
@@ -165,15 +167,30 @@ class ContactPhoneController extends Controller
      * @param int $phoneId
      * @return JsonResponse
      */
-    public function destroy(int $customerId, int $phoneId): JsonResponse
+    public function destroy(Request $request, int $customerId, int $phoneId): JsonResponse
     {
         try {
             Log::info('Delete phone request received', [
                 'customer_id' => $customerId,
                 'phone_id' => $phoneId,
+                'data' => $request->all(),
             ]);
 
-            $result = $this->phoneService->deletePhone($customerId, $phoneId);
+            // Validate request
+            $validator = Validator::make($request->all(), [
+                'userDeleted' => 'required|string|max:100',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 0,
+                    'data' => null,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $result = $this->phoneService->deletePhone($customerId, $phoneId, $request->all());
 
             // Return exact response from Maximus API
             return response()->json($result['data'], $result['status_code']);

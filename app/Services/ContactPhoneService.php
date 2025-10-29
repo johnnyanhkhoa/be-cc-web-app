@@ -170,10 +170,11 @@ class ContactPhoneService
      *
      * @param int $customerId
      * @param int $phoneId
+     * @param array $deleteData  // ← THÊM DÒNG NÀY
      * @return array
      * @throws Exception
      */
-    public function deletePhone(int $customerId, int $phoneId): array
+    public function deletePhone(int $customerId, int $phoneId, array $deleteData): array
     {
         try {
             $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
@@ -182,14 +183,16 @@ class ContactPhoneService
                 'url' => $url,
                 'customer_id' => $customerId,
                 'phone_id' => $phoneId,
+                'delete_data' => $deleteData,
             ]);
 
             $response = Http::timeout(30)
                 ->withHeaders([
                     'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',  // ← THÊM DÒNG NÀY
                     'x-api-key' => 't03JN3y8L12gzVbuLuorjwBAHgVAkkY6QOvJkP6m',
                 ])
-                ->delete($url);
+                ->delete($url, $deleteData);  // ← THÊM $deleteData VÀO ĐÂY
 
             $data = $response->json();
 
