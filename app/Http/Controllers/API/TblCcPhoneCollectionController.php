@@ -248,7 +248,7 @@ class TblCcPhoneCollectionController extends Controller
                     'assignedBy' => $pc->assignedBy,
                     'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'totalAttempts' => $pc->totalAttempts,
-                    'lastAttemptAt' => $pc->lastAttemptAt?->format('Y-m-d H:i:s'),
+                    'lastAttemptAt' => $pc->lastAttemptAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'lastAttemptBy' => $pc->lastAttemptBy,
                     'segmentType' => $pc->segmentType,
                     'contractId' => $pc->contractId,
@@ -269,8 +269,8 @@ class TblCcPhoneCollectionController extends Controller
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
                     'batchCode' => $pc->batch?->code, // NEW: Batch code from relationship
-                    'createdAt' => $pc->createdAt?->format('Y-m-d H:i:s'),
-                    'updatedAt' => $pc->updatedAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $pc->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'updatedAt' => $pc->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                 ];
             });
 
@@ -409,10 +409,10 @@ class TblCcPhoneCollectionController extends Controller
                     'totalAmount' => $phoneCollection->totalAmount,
                     'amountUnpaid' => $phoneCollection->amountUnpaid,
                     'totalAttempts' => $phoneCollection->totalAttempts,
-                    'lastAttemptAt' => $phoneCollection->lastAttemptAt?->format('Y-m-d H:i:s'),
+                    'lastAttemptAt' => $phoneCollection->lastAttemptAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'completedBy' => $phoneCollection->completedBy, // authUserId
-                    'completedAt' => $phoneCollection->completedAt?->format('Y-m-d H:i:s'),
-                    'updatedAt' => $phoneCollection->updatedAt?->format('Y-m-d H:i:s'),
+                    'completedAt' => $phoneCollection->completedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'updatedAt' => $phoneCollection->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatedBy' => $phoneCollection->updatedBy, // authUserId
                 ]
             ], 200);
