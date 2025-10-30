@@ -202,18 +202,58 @@ class TblCcPhoneCollectionController extends Controller
                 $query->byAssignedTo($request->assignedTo);
             }
 
-            // Filter by assignedAt date if provided
-            if ($request->has('assignedAt') && !empty($request->assignedAt)) {
-                // Validate date format
-                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->assignedAt)) {
+            // Filter by assignedAt date range if provided
+            if ($request->has('assignedAtFrom') || $request->has('assignedAtTo')) {
+                $assignedAtFrom = $request->assignedAtFrom;
+                $assignedAtTo = $request->assignedAtTo;
+
+                // Validate date format for assignedAtFrom
+                if ($assignedAtFrom && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $assignedAtFrom)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Invalid date format for assignedAt',
+                        'message' => 'Invalid date format for assignedAtFrom',
                         'error' => 'Date must be in Y-m-d format (e.g., 2025-01-15)'
                     ], 400);
                 }
 
-                $query->byAssignedAt($request->assignedAt);
+                // Validate date format for assignedAtTo
+                if ($assignedAtTo && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $assignedAtTo)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid date format for assignedAtTo',
+                        'error' => 'Date must be in Y-m-d format (e.g., 2025-01-15)'
+                    ], 400);
+                }
+
+                // Validate that assignedAtFrom is not after assignedAtTo
+                if ($assignedAtFrom && $assignedAtTo && $assignedAtFrom > $assignedAtTo) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid date range',
+                        'error' => 'assignedAtFrom must be before or equal to assignedAtTo'
+                    ], 400);
+                }
+
+                // Apply date range filter with timezone consideration (Myanmar timezone)
+                if ($assignedAtFrom && $assignedAtTo) {
+                    // Both dates provided - filter by range
+                    $query->whereRaw(
+                        'DATE("assignedAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
+                        [$assignedAtFrom, $assignedAtTo]
+                    );
+                } elseif ($assignedAtFrom) {
+                    // Only from date provided
+                    $query->whereRaw(
+                        'DATE("assignedAt" AT TIME ZONE \'Asia/Yangon\') >= ?',
+                        [$assignedAtFrom]
+                    );
+                } elseif ($assignedAtTo) {
+                    // Only to date provided
+                    $query->whereRaw(
+                        'DATE("assignedAt" AT TIME ZONE \'Asia/Yangon\') <= ?',
+                        [$assignedAtTo]
+                    );
+                }
             }
 
             // Sorting
