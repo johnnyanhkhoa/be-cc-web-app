@@ -54,60 +54,88 @@ class AssignDailyCalls extends Command
 
             DB::beginTransaction();
 
-            // Step 1: Get available agents from duty roster
-            $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate);
+            // Step 1: Get all distinct batchIds from phone collections
+            $batchIds = TblCcPhoneCollection::whereNotNull('batchId')
+                ->distinct()
+                ->pluck('batchId')
+                ->toArray();
 
-            if ($availableAgents->isEmpty()) {
-                $this->warn("No agents available for assignment on {$assignmentDate}");
-                $this->warn('Please ensure duty roster is created for this date.');
+            if (empty($batchIds)) {
+                $this->warn('No batches found in phone collections.');
                 return self::SUCCESS;
             }
 
-            $this->info("Found {$availableAgents->count()} available agents:");
-            foreach ($availableAgents as $agent) {
-                $this->line("  - {$agent->userFullName} (authUserId: {$agent->authUserId})");
-            }
-
-            // Step 2: Get phone collections to assign (only unassigned, not completed)
-            $callsToAssign = TblCcPhoneCollection::where('status', '!=', 'completed')
-                ->whereNull('assignedTo')
-                ->orderBy('createdAt', 'asc')
-                ->get();
-
-            if ($callsToAssign->isEmpty()) {
-                $this->warn('No phone collections available for assignment.');
-                $this->warn('All phone collections are either completed or already assigned.');
-                return self::SUCCESS;
-            }
-
-            $this->info("Found {$callsToAssign->count()} phone collections to assign");
-
-            // Step 3: Perform round-robin assignment
-            $this->info('Performing round-robin assignment...');
-            $bar = $this->output->createProgressBar($callsToAssign->count());
-            $bar->start();
-
-            $assignments = $this->performRoundRobinAssignment(
-                $callsToAssign,
-                $availableAgents,
-                $assignedBy,
-                $assignmentDate,
-                $bar
-            );
-
-            $bar->finish();
+            $this->info("Found " . count($batchIds) . " batches to process: " . implode(', ', $batchIds));
             $this->newLine();
+
+            $allAssignments = [];
+            $totalCallsAssigned = 0;
+
+            // Step 2: Process each batch separately
+            foreach ($batchIds as $batchId) {
+                $this->info("📦 Processing Batch {$batchId}");
+                $this->info(str_repeat('-', 60));
+
+                // Get available agents for this batch
+                $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate, $batchId);
+
+                if ($availableAgents->isEmpty()) {
+                    $this->warn("  ⚠️  No agents available for batch {$batchId} on {$assignmentDate}");
+                    $this->warn("  Please ensure duty roster is created for this batch.");
+                    $this->newLine();
+                    continue;
+                }
+
+                $this->info("  ✓ Found {$availableAgents->count()} available agents for batch {$batchId}");
+
+                // Get calls to assign for this batch
+                $callsToAssign = TblCcPhoneCollection::where('batchId', $batchId)
+                    ->whereNull('assignedTo')
+                    ->orderBy('daysOverdueGross', 'asc')
+                    ->orderBy('createdAt', 'asc')
+                    ->get();
+
+                if ($callsToAssign->isEmpty()) {
+                    $this->warn("  ℹ️  No unassigned calls found for batch {$batchId}");
+                    $this->newLine();
+                    continue;
+                }
+
+                $this->info("  ✓ Found {$callsToAssign->count()} calls to assign for batch {$batchId}");
+
+                // Perform round-robin assignment for this batch
+                $this->info("  🔄 Assigning calls...");
+                $bar = $this->output->createProgressBar($callsToAssign->count());
+                $bar->start();
+
+                $batchAssignments = $this->performRoundRobinAssignment(
+                    $callsToAssign,
+                    $availableAgents,
+                    $assignedBy,
+                    $assignmentDate,
+                    $batchId,
+                    $bar
+                );
+
+                $bar->finish();
+                $this->newLine();
+
+                $allAssignments[$batchId] = $batchAssignments;
+                $totalCallsAssigned += count($batchAssignments);
+
+                $this->info("  ✅ Assigned {$callsToAssign->count()} calls to {$availableAgents->count()} agents for batch {$batchId}");
+                $this->newLine();
+            }
 
             DB::commit();
 
             // Step 4: Display results
-            $this->displayAssignmentResults($assignments, $availableAgents);
+            $this->displayBatchAssignmentResults($allAssignments);
 
             Log::info('Daily call assignment completed via command', [
                 'assignment_date' => $assignmentDate,
-                'total_phone_collections' => $callsToAssign->count(),
-                'total_agents' => $availableAgents->count(),
-                'assigned_by_auth_user_id' => $assignedBy,
+                'total_calls' => $totalCallsAssigned,
+                'total_batches' => count($allAssignments),
                 'command_user' => 'system'
             ]);
 
@@ -139,7 +167,7 @@ class AssignDailyCalls extends Command
      * @param mixed $progressBar
      * @return array
      */
-    private function performRoundRobinAssignment($calls, $agents, string $assignedBy, string $assignmentDate, $progressBar = null): array
+    private function performRoundRobinAssignment($calls, $agents, int $assignedBy, string $assignmentDate, int $batchId, $progressBar = null): array
     {
         $assignments = [];
         $agentIndex = 0;
@@ -149,21 +177,23 @@ class AssignDailyCalls extends Command
         foreach ($calls as $index => $call) {
             $currentAgent = $agentsArray[$agentIndex];
 
-            // Update phone collection with assignment
+            // Update call with assignment
             $call->update([
-                'assignedTo' => $currentAgent['authUserId'],
+                'assignedTo' => $currentAgent['authUserId'],  // ✅ SỬA: dùng authUserId thay vì id
                 'assignedBy' => $assignedBy,
                 'assignedAt' => now(),
+                'status' => 'assigned',
                 'updatedBy' => $assignedBy,
             ]);
 
             $assignments[] = [
                 'phoneCollectionId' => $call->phoneCollectionId,
-                'contractId' => $call->contractId,
                 'contractNo' => $call->contractNo,
-                'customerFullName' => $call->customerFullName,
-                'agent_auth_user_id' => $currentAgent['authUserId'],
+                'agent_id' => $currentAgent['id'],              // Local id để display
+                'agent_auth_user_id' => $currentAgent['authUserId'],  // AuthUserId để log
                 'agent_name' => $currentAgent['userFullName'],
+                'batch_id' => $batchId,
+                'dpd' => $call->daysOverdueGross,
                 'sequence' => $index + 1
             ];
 
@@ -180,52 +210,58 @@ class AssignDailyCalls extends Command
     }
 
     /**
-     * Display assignment results in a nice table format
-     *
-     * @param array $assignments
-     * @param \Illuminate\Support\Collection $agents
-     * @return void
+     * Display batch assignment results
      */
-    private function displayAssignmentResults(array $assignments, $agents): void
+    private function displayBatchAssignmentResults(array $allAssignments): void
     {
         $this->newLine();
-        $this->info('📊 Assignment Results:');
-        $this->info('-'.str_repeat('-', 60));
+        $this->info('📊 Assignment Summary by Batch:');
+        $this->info('='.str_repeat('=', 80));
 
-        // Calculate summary by agent using authUserId
-        $summary = [];
-        foreach ($agents as $agent) {
-            $summary[$agent->authUserId] = [
-                'name' => $agent->userFullName,
-                'count' => 0
-            ];
-        }
+        $grandTotal = 0;
 
-        // Count assignments per agent
-        foreach ($assignments as $assignment) {
-            $authUserId = $assignment['agent_auth_user_id'];
-            if (isset($summary[$authUserId])) {
-                $summary[$authUserId]['count']++;
+        foreach ($allAssignments as $batchId => $assignments) {
+            $this->newLine();
+            $this->info("📦 Batch {$batchId}:");
+            $this->info('-'.str_repeat('-', 80));
+
+            // Calculate summary by agent
+            $summary = [];
+            foreach ($assignments as $assignment) {
+                $agentId = $assignment['agent_id'];
+                if (!isset($summary[$agentId])) {
+                    $summary[$agentId] = [
+                        'name' => $assignment['agent_name'],
+                        'count' => 0
+                    ];
+                }
+                $summary[$agentId]['count']++;
             }
+
+            // Display summary table
+            $tableData = [];
+            foreach ($summary as $agentId => $data) {
+                $tableData[] = [
+                    'Agent ID' => $agentId,
+                    'Agent Name' => $data['name'],
+                    'Calls Assigned' => $data['count']
+                ];
+            }
+
+            $this->table(
+                ['Agent ID', 'Agent Name', 'Calls Assigned'],
+                $tableData
+            );
+
+            $batchTotal = count($assignments);
+            $grandTotal += $batchTotal;
+            $averagePerAgent = count($summary) > 0 ? round($batchTotal / count($summary), 1) : 0;
+            $this->info("  Total for Batch {$batchId}: {$batchTotal} calls");
+            $this->info("  Average per agent: {$averagePerAgent} calls");
         }
 
-        // Display summary table
-        $tableData = [];
-        foreach ($summary as $authUserId => $data) {
-            $tableData[] = [
-                'Auth User ID' => $authUserId,
-                'Agent Name' => $data['name'],
-                'Calls Assigned' => $data['count']
-            ];
-        }
-
-        $this->table(
-            ['Auth User ID', 'Agent Name', 'Calls Assigned'],
-            $tableData
-        );
-
-        $this->info("Total assignments made: " . count($assignments));
-        $averagePerAgent = round(count($assignments) / count($agents), 1);
-        $this->info("Average calls per agent: {$averagePerAgent}");
+        $this->newLine();
+        $this->info('='.str_repeat('=', 80));
+        $this->info("🎯 GRAND TOTAL: {$grandTotal} calls assigned across " . count($allAssignments) . " batches");
     }
 }
