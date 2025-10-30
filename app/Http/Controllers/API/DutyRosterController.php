@@ -26,21 +26,25 @@ class DutyRosterController extends Controller
         try {
             $request->validate([
                 'from_date' => 'required|date',
-                'to_date' => 'required|date|after_or_equal:from_date'
+                'to_date' => 'required|date|after_or_equal:from_date',
+                'batchId' => 'nullable|integer|min:1'
             ]);
 
             $fromDate = Carbon::parse($request->from_date);
             $toDate = Carbon::parse($request->to_date);
+            $batchId = $request->batchId;  // ← THÊM DÒNG NÀY
 
             Log::info('Fetching duty roster for date range', [
                 'from_date' => $fromDate->toDateString(),
-                'to_date' => $toDate->toDateString()
+                'to_date' => $toDate->toDateString(),
+                'batch_id' => $batchId  // ← THÊM DÒNG NÀY
             ]);
 
             // Get duty roster data
             $dutyData = DutyRoster::getDutyRosterData(
                 $fromDate->toDateString(),
-                $toDate->toDateString()
+                $toDate->toDateString(),
+                $batchId  // ← THÊM THAM SỐ NÀY
             );
 
             // Check if any data exists
@@ -62,6 +66,7 @@ class DutyRosterController extends Controller
                 'data' => [
                     'from_date' => $fromDate->toDateString(),
                     'to_date' => $toDate->toDateString(),
+                    'batch_id' => $batchId,  // ← THÊM DÒNG NÀY
                     'days' => $dutyData,
                 ]
             ], 200);
@@ -95,7 +100,8 @@ class DutyRosterController extends Controller
                 'start_date' => $validated['start_date'],
                 'end_date' => $validated['end_date'],
                 'agent_auth_user_ids' => $validated['agent_auth_user_ids'],
-                'created_by_auth_user_id' => $validated['createdBy']
+                'created_by_auth_user_id' => $validated['createdBy'],
+                'batch_id' => $validated['batchId']  // ← THÊM DÒNG NÀY
             ]);
 
             DB::beginTransaction();
@@ -104,6 +110,7 @@ class DutyRosterController extends Controller
             $endDate = Carbon::parse($validated['end_date']);
             $agentAuthUserIds = $validated['agent_auth_user_ids'];
             $createdByAuthUserId = $validated['createdBy'];
+            $batchId = $validated['batchId'];  // ← THÊM DÒNG NÀY
 
             // ✅ Convert createdBy authUserId to local id
             $creatorUser = User::where('authUserId', $createdByAuthUserId)->first();
@@ -136,6 +143,7 @@ class DutyRosterController extends Controller
                     $existingDuty = DutyRoster::withTrashed()
                         ->where('work_date', $dateStr)
                         ->where('user_id', $localUserId)
+                        ->where('batchId', $batchId)  // ← THÊM DÒNG NÀY
                         ->first();
 
                     if ($existingDuty) {
@@ -144,7 +152,8 @@ class DutyRosterController extends Controller
                             $existingDuty->restore();
                             $existingDuty->update([
                                 'is_working' => true,
-                                'created_by' => $createdBy, // ✅ Local id
+                                'created_by' => $createdBy,
+                                'batchId' => $batchId,  // ← THÊM DÒNG NÀY
                             ]);
 
                             $created[] = [
@@ -156,7 +165,8 @@ class DutyRosterController extends Controller
                             // Update existing active record
                             $existingDuty->update([
                                 'is_working' => true,
-                                'created_by' => $createdBy, // ✅ Local id
+                                'created_by' => $createdBy,
+                                'batchId' => $batchId,  // ← THÊM DÒNG NÀY
                             ]);
 
                             $created[] = [
@@ -171,7 +181,8 @@ class DutyRosterController extends Controller
                             'work_date' => $dateStr,
                             'user_id' => $localUserId,
                             'is_working' => true,
-                            'created_by' => $createdBy, // ✅ Local id
+                            'created_by' => $createdBy,
+                            'batchId' => $batchId,  // ← THÊM DÒNG NÀY
                         ]);
 
                         $created[] = [
@@ -233,16 +244,19 @@ class DutyRosterController extends Controller
     {
         try {
             $request->validate([
-                'authUserId' => 'required|integer|exists:users,authUserId', // Đổi từ user_id sang authUserId
-                'date' => 'required|date'
+                'authUserId' => 'required|integer|exists:users,authUserId',
+                'date' => 'required|date',
+                'batchId' => 'required|integer|min:1'  // ← THÊM DÒNG NÀY
             ]);
 
             $authUserId = $request->authUserId;
             $date = $request->date;
+            $batchId = $request->batchId;
 
             Log::info('Attempting to delete from duty roster', [
                 'auth_user_id' => $authUserId,
-                'date' => $date
+                'date' => $date,
+                'batch_id' => $batchId  // ← THÊM DÒNG NÀY
             ]);
 
             // Find user by authUserId to get local id
@@ -258,6 +272,7 @@ class DutyRosterController extends Controller
 
             $dutyRoster = DutyRoster::where('user_id', $user->id)
                 ->where('work_date', $date)
+                ->where('batchId', $batchId)  // ← THÊM DÒNG NÀY
                 ->first();
 
             if (!$dutyRoster) {
@@ -277,13 +292,14 @@ class DutyRosterController extends Controller
                 ], 403);
             }
 
-            $agentName = $dutyRoster->user->user_full_name ?? 'Unknown';
+            $agentName = $dutyRoster->user->userFullName ?? 'Unknown';
 
             $dutyRoster->delete();
 
             Log::info('Duty roster assignment deleted successfully', [
                 'auth_user_id' => $authUserId,
                 'work_date' => $date,
+                'batch_id' => $batchId,  // ← THÊM DÒNG NÀY
                 'agent_name' => $agentName
             ]);
 
@@ -293,6 +309,7 @@ class DutyRosterController extends Controller
                 'data' => [
                     'authUserId' => $authUserId,
                     'date' => $date,
+                    'batch_id' => $batchId,  // ← THÊM DÒNG NÀY
                     'agent_name' => $agentName
                 ]
             ], 200);
@@ -320,8 +337,8 @@ class DutyRosterController extends Controller
     {
         try {
             $agents = User::active()
-                ->select('id', 'user_full_name', 'email', 'username')
-                ->orderBy('user_full_name')
+                ->select('id', 'userFullName', 'email', 'username')
+                ->orderBy('userFullName')
                 ->get();
 
             Log::info('Retrieved available agents', [
@@ -362,10 +379,12 @@ class DutyRosterController extends Controller
         try {
             $request->merge(['date' => $date]);
             $request->validate([
-                'date' => 'required|date'
+                'date' => 'required|date',
+                'batchId' => 'nullable|integer|min:1'  // ← THÊM DÒNG NÀY
             ]);
 
-            $agents = DutyRoster::getAvailableAgentsForDate($date);
+            $batchId = $request->batchId;  // ← THÊM DÒNG NÀY
+            $agents = DutyRoster::getAvailableAgentsForDate($date, $batchId);  // ← UPDATE
 
             Log::info('Retrieved agents for specific date', [
                 'date' => $date,
@@ -380,7 +399,7 @@ class DutyRosterController extends Controller
                     'agents' => $agents->map(function ($user) {
                         return [
                             'id' => $user->id,
-                            'name' => $user->user_full_name,
+                            'name' => $user->userFullName,
                             'email' => $user->email,
                             'username' => $user->username,
                         ];

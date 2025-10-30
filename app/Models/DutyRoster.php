@@ -20,6 +20,7 @@ class DutyRoster extends Model
         'user_id',
         'is_working',
         'created_by',
+        'batchId',  // ← THÊM DÒNG NÀY
     ];
 
     /**
@@ -28,6 +29,7 @@ class DutyRoster extends Model
     protected $casts = [
         'work_date' => 'date',
         'is_working' => 'boolean',
+        'batchId' => 'integer',  // ← THÊM DÒNG NÀY
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -75,6 +77,14 @@ class DutyRoster extends Model
     }
 
     /**
+     * Scope: Get duty rosters for a specific batchId
+     */
+    public function scopeForBatch($query, $batchId)
+    {
+        return $query->where('batchId', $batchId);
+    }
+
+    /**
      * Check if duty roster can be deleted (before 7AM same day)
      */
     public function canBeDeleted(): bool
@@ -98,30 +108,41 @@ class DutyRoster extends Model
     /**
      * Static method: Get available agents for a specific date
      */
-    public static function getAvailableAgentsForDate($date)
+    public static function getAvailableAgentsForDate($date, $batchId = null)
     {
-        return static::with('user')
+        $query = static::with('user')
             ->forDate($date)
-            ->working()
-            ->get()
-            ->pluck('user');
+            ->working();
+
+        // Filter by batchId if provided
+        if ($batchId !== null) {
+            $query->where('batchId', $batchId);
+        }
+
+        return $query->get()->pluck('user');
     }
 
     /**
      * Static method: Get duty roster data for date range
      */
-    public static function getDutyRosterData($startDate, $endDate)
+    public static function getDutyRosterData($startDate, $endDate, $batchId = null)
     {
         Log::info('Getting duty roster data', [
             'start_date' => $startDate,
             'end_date' => $endDate
         ]);
 
-        $duties = static::with('user')
+        $query = static::with('user')
             ->where('work_date', '>=', $startDate)
             ->where('work_date', '<=', $endDate)
-            ->where('is_working', true)
-            ->get();
+            ->where('is_working', true);
+
+        // Filter by batchId if provided
+        if ($batchId !== null) {
+            $query->where('batchId', $batchId);
+        }
+
+        $duties = $query->get();
 
         Log::info('Duty roster query result', [
             'count' => $duties->count()

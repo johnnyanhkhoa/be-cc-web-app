@@ -26,6 +26,7 @@ class DutyRosterRequest extends FormRequest
             'agent_auth_user_ids' => ['required', 'array', 'min:1'],
             'agent_auth_user_ids.*' => ['required', 'integer', 'exists:users,authUserId'],
             'createdBy' => ['required', 'integer', 'exists:users,authUserId'], // ✅ THÊM
+            'batchId' => ['required', 'integer', 'min:1'],
         ];
     }
 
@@ -44,6 +45,9 @@ class DutyRosterRequest extends FormRequest
             'agent_auth_user_ids.*.exists' => 'Selected agent does not exist',
             'createdBy.required' => 'Created by is required', // ✅ THÊM
             'createdBy.exists' => 'Creator user does not exist', // ✅ THÊM
+            'batchId.required' => 'Batch ID is required',  // ← THÊM DÒNG NÀY
+            'batchId.integer' => 'Batch ID must be an integer',  // ← THÊM DÒNG NÀY
+            'batchId.min' => 'Batch ID must be at least 1',
         ];
     }
 
