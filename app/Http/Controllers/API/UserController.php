@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
@@ -432,7 +433,7 @@ class UserController extends Controller
         }
     }
 
-    /**
+   /**
      * Update user level
      *
      * PUT /api/users/{userId}/level
@@ -446,16 +447,30 @@ class UserController extends Controller
         try {
             $request->validate([
                 'level' => 'required|string|in:team-leader,senior,mid-level,junior',
+                'updatedBy' => 'required|integer|exists:users,authUserId',
             ]);
 
             $level = $request->input('level');
+            $updatedByAuthUserId = $request->input('updatedBy');
 
             Log::info('Updating user level', [
                 'user_id' => $userId,
-                'new_level' => $level
+                'new_level' => $level,
+                'updated_by_auth_user_id' => $updatedByAuthUserId
             ]);
 
-            // Find user
+            // Find the updater user by authUserId to get local id
+            $updaterUser = User::where('authUserId', $updatedByAuthUserId)->first();
+
+            if (!$updaterUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Updater user not found',
+                    'error' => "No user found with authUserId {$updatedByAuthUserId}"
+                ], 404);
+            }
+
+            // Find user to update
             $user = User::find($userId);
 
             if (!$user) {
@@ -466,16 +481,18 @@ class UserController extends Controller
                 ], 404);
             }
 
-            // Update level
+            // Update level and updatedBy
             $oldLevel = $user->level;
             $user->level = $level;
+            $user->updatedBy = $updaterUser->id; // Use local id
             $user->save();
 
             Log::info('User level updated successfully', [
                 'user_id' => $userId,
                 'username' => $user->username,
                 'old_level' => $oldLevel,
-                'new_level' => $level
+                'new_level' => $level,
+                'updated_by_id' => $updaterUser->id
             ]);
 
             return response()->json([
@@ -489,6 +506,12 @@ class UserController extends Controller
                     'email' => $user->email,
                     'level' => $user->level,
                     'previousLevel' => $oldLevel,
+                    'updatedBy' => [
+                        'id' => $updaterUser->id,
+                        'authUserId' => $updaterUser->authUserId,
+                        'username' => $updaterUser->username,
+                        'userFullName' => $updaterUser->userFullName,
+                    ],
                     'updatedAt' => $user->updatedAt->format('Y-m-d H:i:s')
                 ]
             ], 200);
@@ -510,6 +533,164 @@ class UserController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update user level',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Batch update user levels
+     *
+     * POST /api/users/batch-update-levels
+     *
+     * Body: {
+     *   "updates": [
+     *     { "userId": 7, "level": "senior" },
+     *     { "userId": 5, "level": "junior" },
+     *     { "userId": 9, "level": null }
+     *   ],
+     *   "updatedBy": 1
+     * }
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function batchUpdateLevels(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'updates' => 'required|array|min:1',
+                'updates.*.userId' => 'required|integer|exists:users,id',
+                'updates.*.level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'updatedBy' => 'required|integer|exists:users,authUserId',
+            ]);
+
+            $updates = $request->input('updates');
+            $updatedByAuthUserId = $request->input('updatedBy');
+
+            Log::info('Batch updating user levels', [
+                'total_updates' => count($updates),
+                'updated_by_auth_user_id' => $updatedByAuthUserId
+            ]);
+
+            // Find the updater user by authUserId to get local id
+            $updaterUser = User::where('authUserId', $updatedByAuthUserId)->first();
+
+            if (!$updaterUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Updater user not found',
+                    'error' => "No user found with authUserId {$updatedByAuthUserId}"
+                ], 404);
+            }
+
+            DB::beginTransaction();
+
+            $results = [];
+            $successCount = 0;
+            $failCount = 0;
+
+            foreach ($updates as $update) {
+                $userId = $update['userId'];
+                $level = $update['level'] ?? null;
+
+                try {
+                    $user = User::find($userId);
+
+                    if (!$user) {
+                        $results[] = [
+                            'userId' => $userId,
+                            'success' => false,
+                            'error' => 'User not found'
+                        ];
+                        $failCount++;
+                        continue;
+                    }
+
+                    $oldLevel = $user->level;
+                    $user->level = $level;
+                    $user->updatedBy = $updaterUser->id; // Use local id
+                    $user->save();
+
+                    $results[] = [
+                        'userId' => $userId,
+                        'authUserId' => $user->authUserId,
+                        'username' => $user->username,
+                        'userFullName' => $user->userFullName,
+                        'previousLevel' => $oldLevel,
+                        'newLevel' => $level,
+                        'success' => true
+                    ];
+                    $successCount++;
+
+                    Log::info('User level updated in batch', [
+                        'user_id' => $userId,
+                        'username' => $user->username,
+                        'old_level' => $oldLevel,
+                        'new_level' => $level
+                    ]);
+
+                } catch (Exception $e) {
+                    $results[] = [
+                        'userId' => $userId,
+                        'success' => false,
+                        'error' => $e->getMessage()
+                    ];
+                    $failCount++;
+
+                    Log::error('Failed to update user in batch', [
+                        'user_id' => $userId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            Log::info('Batch update completed', [
+                'total' => count($updates),
+                'success' => $successCount,
+                'failed' => $failCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Batch update completed',
+                'data' => [
+                    'results' => $results,
+                    'summary' => [
+                        'total' => count($updates),
+                        'successful' => $successCount,
+                        'failed' => $failCount
+                    ],
+                    'updatedBy' => [
+                        'id' => $updaterUser->id,
+                        'authUserId' => $updaterUser->authUserId,
+                        'username' => $updaterUser->username,
+                        'userFullName' => $updaterUser->userFullName,
+                    ]
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            Log::error('Batch update failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Batch update failed',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }

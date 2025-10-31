@@ -101,10 +101,13 @@ Route::prefix('users')->group(function () {
     // Existing route
     Route::get('/available-for-assign', [UserController::class, 'getAvailableUsersForAssign']);
 
-    // NEW: Get all users with optional filters
+    // Get all users with optional filters
     Route::get('/', [UserController::class, 'index']);
 
-    // NEW: Update user level
+    // NEW: Batch update user levels
+    Route::post('/batch-update-levels', [UserController::class, 'batchUpdateLevels']);
+
+    // Update user level
     Route::put('/{userId}/level', [UserController::class, 'updateLevel']);
 });
 
