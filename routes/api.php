@@ -100,6 +100,12 @@ Route::prefix('users')->group(function () {
 
     // Existing route
     Route::get('/available-for-assign', [UserController::class, 'getAvailableUsersForAssign']);
+
+    // NEW: Get all users with optional filters
+    Route::get('/', [UserController::class, 'index']);
+
+    // NEW: Update user level
+    Route::put('/{userId}/level', [UserController::class, 'updateLevel']);
 });
 
 Route::get('/users/available-for-assign/debug', [App\Http\Controllers\API\UserController::class, 'debugAvailableUsers']);

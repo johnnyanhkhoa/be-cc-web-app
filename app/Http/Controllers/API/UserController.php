@@ -346,4 +346,172 @@ class UserController extends Controller
             ], $statusCode);
         }
     }
+
+    /**
+     * Get all users with their levels
+     *
+     * GET /api/users
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            // Optional filters
+            $level = $request->query('level'); // Filter by level
+            $isActive = $request->query('isActive'); // Filter by active status
+            $search = $request->query('search'); // Search by name/username/email
+
+            Log::info('Getting all users with filters', [
+                'level' => $level,
+                'isActive' => $isActive,
+                'search' => $search
+            ]);
+
+            $query = User::query();
+
+            // Apply filters
+            if ($level) {
+                $query->where('level', $level);
+            }
+
+            if ($isActive !== null) {
+                $query->where('isActive', filter_var($isActive, FILTER_VALIDATE_BOOLEAN));
+            }
+
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('userFullName', 'ILIKE', "%{$search}%")
+                    ->orWhere('username', 'ILIKE', "%{$search}%")
+                    ->orWhere('email', 'ILIKE', "%{$search}%");
+                });
+            }
+
+            $users = $query->orderBy('userFullName', 'asc')->get();
+
+            // Format response
+            $formattedUsers = $users->map(function($user) {
+                return [
+                    'id' => $user->id,
+                    'authUserId' => $user->authUserId,
+                    'username' => $user->username,
+                    'userFullName' => $user->userFullName,
+                    'email' => $user->email,
+                    'extensionNo' => $user->extensionNo,
+                    'level' => $user->level,
+                    'isActive' => $user->isActive,
+                    'lastLoginAt' => $user->lastLoginAt?->format('Y-m-d H:i:s'),
+                    'createdAt' => $user->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $user->updatedAt?->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            Log::info('Users retrieved successfully', [
+                'total' => $users->count()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Users retrieved successfully',
+                'data' => $formattedUsers,
+                'total' => $users->count()
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to get users', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve users',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update user level
+     *
+     * PUT /api/users/{userId}/level
+     *
+     * @param Request $request
+     * @param int $userId
+     * @return JsonResponse
+     */
+    public function updateLevel(Request $request, int $userId): JsonResponse
+    {
+        try {
+            $request->validate([
+                'level' => 'required|string|in:team-leader,senior,mid-level,junior',
+            ]);
+
+            $level = $request->input('level');
+
+            Log::info('Updating user level', [
+                'user_id' => $userId,
+                'new_level' => $level
+            ]);
+
+            // Find user
+            $user = User::find($userId);
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found',
+                    'error' => "No user found with ID {$userId}"
+                ], 404);
+            }
+
+            // Update level
+            $oldLevel = $user->level;
+            $user->level = $level;
+            $user->save();
+
+            Log::info('User level updated successfully', [
+                'user_id' => $userId,
+                'username' => $user->username,
+                'old_level' => $oldLevel,
+                'new_level' => $level
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User level updated successfully',
+                'data' => [
+                    'id' => $user->id,
+                    'authUserId' => $user->authUserId,
+                    'username' => $user->username,
+                    'userFullName' => $user->userFullName,
+                    'email' => $user->email,
+                    'level' => $user->level,
+                    'previousLevel' => $oldLevel,
+                    'updatedAt' => $user->updatedAt->format('Y-m-d H:i:s')
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (Exception $e) {
+            Log::error('Failed to update user level', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update user level',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
 }
