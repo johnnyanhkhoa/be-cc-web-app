@@ -182,7 +182,7 @@ class AssignDailyCalls extends Command
                 'assignedTo' => $currentAgent['authUserId'],  // ✅ SỬA: dùng authUserId thay vì id
                 'assignedBy' => $assignedBy,
                 'assignedAt' => now(),
-                'status' => 'assigned',
+                'status' => 'pending',
                 'updatedBy' => $assignedBy,
             ]);
 
