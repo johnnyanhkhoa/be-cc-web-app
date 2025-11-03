@@ -160,10 +160,11 @@ class DutyRoster extends Model
             $dateStr = $current->toDateString();
             $agents = $groupedDuties->get($dateStr, collect())->map(function ($duty) {
                 return [
-                    'id' => $duty->user->id,
                     'authUserId' => $duty->user->authUserId,
-                    'userFullName' => $duty->user->userFullName,
+                    'name' => $duty->user->userFullName,
                     'email' => $duty->user->email,
+                    'username' => $duty->user->username,
+                    'level' => $duty->user->level,  // ← THÊM DÒNG NÀY
                 ];
             });
 
