@@ -17,6 +17,7 @@ use App\Http\Controllers\API\TblCcRemarkController;
 use App\Http\Controllers\API\TblCcScriptController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\VoiceCallController;
+use App\Http\Controllers\API\TeamLevelConfigController;
 
 /*
 |--------------------------------------------------------------------------
@@ -278,6 +279,21 @@ Route::prefix('cc-batches')->group(function () {
 
     // Update batch
     Route::patch('/', [App\Http\Controllers\API\TblCcBatchController::class, 'update']);
+});
+
+// Team Level Configuration Routes
+Route::prefix('cc/team-level-config')->group(function () {
+    // Get suggested config for target date
+    Route::get('/{targetDate}', [TeamLevelConfigController::class, 'getSuggestedConfig']);
+
+    // Get configuration history
+    Route::get('/history/list', [TeamLevelConfigController::class, 'getHistory']);
+
+    // Save/Update configuration
+    Route::post('/', [TeamLevelConfigController::class, 'saveConfig']);
+
+    // Approve configuration
+    Route::post('/{configId}/approve', [TeamLevelConfigController::class, 'approveConfig']);
 });
 
 // Reschedule Routes

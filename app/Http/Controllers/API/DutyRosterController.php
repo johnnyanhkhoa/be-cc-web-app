@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DutyRosterRequest;
+use App\Services\TeamLevelConfigService;
 use App\Models\DutyRoster;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -196,6 +197,27 @@ class DutyRosterController extends Controller
             }
 
             DB::commit();
+
+            if ($batchId === 1) {
+            try {
+                $configService = app(TeamLevelConfigService::class);
+                $configService->generateSuggestedConfig(
+                    $startDate->toDateString(),
+                    $createdBy
+                );
+
+                Log::info('Auto-generated suggested config for batch 1', [
+                    'target_date' => $startDate->toDateString(),
+                    'batch_id' => $batchId
+                ]);
+            } catch (Exception $e) {
+                // Don't fail duty roster creation if config generation fails
+                Log::error('Failed to generate suggested config', [
+                    'target_date' => $startDate->toDateString(),
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
 
             Log::info('Duty roster assignments processed', [
                 'processed_count' => count($created)
