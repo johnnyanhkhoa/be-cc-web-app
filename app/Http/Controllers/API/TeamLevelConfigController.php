@@ -69,7 +69,7 @@ class TeamLevelConfigController extends Controller
             if (!$config) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unable to generate config. Please ensure duty roster exists for batch 1.',
+                    'message' => 'Cannot generate config: No duty roster or unassigned calls found for batch 1.',
                 ], 404);
             }
 
@@ -142,6 +142,7 @@ class TeamLevelConfigController extends Controller
             // Get suggested config to get agent counts
             $suggestedConfig = TblCcTeamLevelConfig::suggested()
                 ->active()
+                ->where('batchId', 1)  // ← THÊM
                 ->forDate($request->targetDate)
                 ->first();
 
@@ -160,11 +161,13 @@ class TeamLevelConfigController extends Controller
             // Create new approved config
             $config = TblCcTeamLevelConfig::create([
                 'targetDate' => $request->targetDate,
+                'batchId' => 1,  // ← THÊM
                 'teamLeaderCount' => $suggestedConfig->teamLeaderCount,
                 'seniorCount' => $suggestedConfig->seniorCount,
                 'midLevelCount' => $suggestedConfig->midLevelCount,
                 'juniorCount' => $suggestedConfig->juniorCount,
                 'totalAgents' => $suggestedConfig->totalAgents,
+                'totalCalls' => $suggestedConfig->totalCalls,  // ← THÊM
                 'teamLeaderPercentage' => $request->teamLeaderPercentage,
                 'seniorPercentage' => $request->seniorPercentage,
                 'midLevelPercentage' => $request->midLevelPercentage,
@@ -350,6 +353,7 @@ class TeamLevelConfigController extends Controller
         return [
             'configId' => $config->configId,
             'targetDate' => $config->targetDate->format('Y-m-d'),
+            'batchId' => $config->batchId,
             'agentCounts' => [
                 'teamLeader' => $config->teamLeaderCount,
                 'senior' => $config->seniorCount,
@@ -357,6 +361,7 @@ class TeamLevelConfigController extends Controller
                 'junior' => $config->juniorCount,
                 'total' => $config->totalAgents,
             ],
+            'totalCalls' => $config->totalCalls,
             'percentages' => [
                 'teamLeader' => (float) $config->teamLeaderPercentage,
                 'senior' => (float) $config->seniorPercentage,

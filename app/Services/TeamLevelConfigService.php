@@ -24,7 +24,7 @@ class TeamLevelConfigService
     ];
 
     /**
-     * Generate suggested config based on duty roster for batchId 1 (past-due)
+     * Generate suggested config based on duty roster and unassigned calls for batchId 1
      *
      * @param string $targetDate
      * @param int $createdBy Local user id
@@ -38,7 +38,7 @@ class TeamLevelConfigService
                 'created_by' => $createdBy
             ]);
 
-            // Get duty roster for batchId = 1 (past-due)
+            // ✅ CHECK 1: Get duty roster for batchId = 1 (past-due)
             $dutyRosters = DutyRoster::with('user')
                 ->where('work_date', $targetDate)
                 ->where('batchId', 1)
@@ -50,6 +50,38 @@ class TeamLevelConfigService
                     'target_date' => $targetDate
                 ]);
                 return null;
+            }
+
+            // ✅ CHECK 2: Get unassigned calls for batchId = 1
+            $unassignedCalls = \App\Models\TblCcPhoneCollection::where('batchId', 1)
+                ->whereNull('assignedTo')
+                ->count();
+
+            if ($unassignedCalls === 0) {
+                Log::warning('No unassigned calls found for batchId 1', [
+                    'target_date' => $targetDate
+                ]);
+                return null;
+            }
+
+            Log::info('Found unassigned calls', [
+                'target_date' => $targetDate,
+                'unassigned_calls' => $unassignedCalls
+            ]);
+
+            // ✅ CHECK 3: Check if config already exists (avoid duplicates)
+            $existingConfig = TblCcTeamLevelConfig::where('targetDate', $targetDate)
+                ->where('batchId', 1)
+                ->where('configType', TblCcTeamLevelConfig::TYPE_SUGGESTED)
+                ->where('isActive', true)
+                ->first();
+
+            if ($existingConfig) {
+                Log::info('Suggested config already exists, returning existing', [
+                    'config_id' => $existingConfig->configId,
+                    'target_date' => $targetDate
+                ]);
+                return $existingConfig;
             }
 
             // Count agents by level
@@ -82,23 +114,27 @@ class TeamLevelConfigService
             // Get previous approved config to use as base
             $previousConfig = TblCcTeamLevelConfig::approved()
                 ->active()
+                ->where('batchId', 1)
                 ->where('targetDate', '<', $targetDate)
                 ->orderBy('targetDate', 'desc')
                 ->first();
 
-            // Deactivate any existing suggested config for this date
+            // Deactivate any existing suggested config for this date and batchId
             TblCcTeamLevelConfig::suggested()
                 ->where('targetDate', $targetDate)
+                ->where('batchId', 1)
                 ->update(['isActive' => false]);
 
             // Create new suggested config
             $config = TblCcTeamLevelConfig::create([
                 'targetDate' => $targetDate,
+                'batchId' => 1,  // ← THÊM
                 'teamLeaderCount' => $counts['team-leader'],
                 'seniorCount' => $counts['senior'],
                 'midLevelCount' => $counts['mid-level'],
                 'juniorCount' => $counts['junior'],
                 'totalAgents' => $totalAgents,
+                'totalCalls' => $unassignedCalls,  // ← THÊM
                 'teamLeaderPercentage' => $percentages['team-leader'],
                 'seniorPercentage' => $percentages['senior'],
                 'midLevelPercentage' => $percentages['mid-level'],
@@ -112,6 +148,7 @@ class TeamLevelConfigService
             Log::info('Suggested config created', [
                 'config_id' => $config->configId,
                 'target_date' => $targetDate,
+                'total_calls' => $unassignedCalls,
                 'percentages' => $percentages
             ]);
 
@@ -181,14 +218,18 @@ class TeamLevelConfigService
         // Check if suggested config already exists
         $config = TblCcTeamLevelConfig::suggested()
             ->active()
+            ->where('batchId', 1)
             ->forDate($targetDate)
             ->first();
 
         if ($config) {
+            Log::info('Using existing suggested config', [
+                'config_id' => $config->configId
+            ]);
             return $config;
         }
 
-        // Generate new suggested config
+        // Generate new suggested config (only if duty roster + calls exist)
         return $this->generateSuggestedConfig($targetDate, $createdBy);
     }
 
@@ -203,6 +244,7 @@ class TeamLevelConfigService
         // Try to get approved config for this date
         $config = TblCcTeamLevelConfig::approved()
             ->active()
+            ->where('batchId', 1)  // ← THÊM
             ->forDate($targetDate)
             ->first();
 
@@ -213,6 +255,7 @@ class TeamLevelConfigService
         // If not found, get the most recent approved config
         return TblCcTeamLevelConfig::approved()
             ->active()
+            ->where('batchId', 1)  // ← THÊM
             ->where('targetDate', '<', $targetDate)
             ->orderBy('targetDate', 'desc')
             ->first();

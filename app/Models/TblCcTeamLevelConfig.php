@@ -40,6 +40,8 @@ class TblCcTeamLevelConfig extends Model
         'createdBy',
         'updatedBy',
         'approvedBy',
+        'totalCalls',  // ← THÊM
+        'batchId',     // ← THÊM
     ];
 
     /**
@@ -52,6 +54,8 @@ class TblCcTeamLevelConfig extends Model
         'midLevelCount' => 'integer',
         'juniorCount' => 'integer',
         'totalAgents' => 'integer',
+        'totalCalls' => 'integer',  // ← THÊM
+        'batchId' => 'integer',
         'teamLeaderPercentage' => 'decimal:2',
         'seniorPercentage' => 'decimal:2',
         'midLevelPercentage' => 'decimal:2',
