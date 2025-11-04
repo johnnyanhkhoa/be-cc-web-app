@@ -141,6 +141,7 @@ class TeamLevelConfigService
                 'juniorPercentage' => $percentages['junior'],
                 'configType' => TblCcTeamLevelConfig::TYPE_SUGGESTED,
                 'isActive' => true,
+                'isAssigned' => false,
                 'basedOnConfigId' => $previousConfig?->configId,
                 'createdBy' => $createdBy,
             ]);

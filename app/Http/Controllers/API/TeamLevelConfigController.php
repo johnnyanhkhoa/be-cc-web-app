@@ -36,14 +36,7 @@ class TeamLevelConfigController extends Controller
     public function getSuggestedConfig(string $targetDate, Request $request): JsonResponse
     {
         try {
-            $request->validate([
-                'createdBy' => 'required|integer|exists:users,authUserId',
-            ]);
-
-            $createdByAuthUserId = $request->input('createdBy');
-
-            // Get local user id
-            $creatorUser = User::where('authUserId', $createdByAuthUserId)->first();
+            $creatorUser = User::first();
             if (!$creatorUser) {
                 return response()->json([
                     'success' => false,
@@ -175,6 +168,7 @@ class TeamLevelConfigController extends Controller
                 'juniorPercentage' => $request->juniorPercentage,
                 'configType' => TblCcTeamLevelConfig::TYPE_APPROVED,
                 'isActive' => true,
+                'isAssigned' => false,
                 'remarks' => $request->remarks,
                 'basedOnConfigId' => $suggestedConfig->configId,
                 'createdBy' => $creatorUser->id,
@@ -371,6 +365,7 @@ class TeamLevelConfigController extends Controller
             ],
             'configType' => $config->configType,
             'isActive' => $config->isActive,
+            'isAssigned' => $config->isAssigned,
             'remarks' => $config->remarks,
             'basedOnConfigId' => $config->basedOnConfigId,
             'createdBy' => $config->creator ? [
@@ -412,6 +407,23 @@ class TeamLevelConfigController extends Controller
             $configId = $request->input('configId');
             $assignedByAuthUserId = $request->input('assignedBy');
 
+            // ✅ THÊM: Get config và check
+            $config = TblCcTeamLevelConfig::find($configId);
+
+            if (!$config) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Config not found',
+                ], 404);
+            }
+
+            if ($config->isAssigned) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This config has already been used for assignment',
+                ], 400);
+            }
+
             Log::info('Assign calls request received', [
                 'target_date' => $targetDate,
                 'config_id' => $configId,
@@ -425,6 +437,9 @@ class TeamLevelConfigController extends Controller
                 $configId,
                 $assignedByAuthUserId
             );
+
+            // ✅ THÊM: Update isAssigned = true
+            $config->update(['isAssigned' => true]);
 
             return response()->json([
                 'success' => true,
