@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\TblCcTeamLevelConfig;
 use App\Models\User;
 use App\Services\TeamLevelConfigService;
+use App\Services\TeamLevelAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -388,5 +389,60 @@ class TeamLevelConfigController extends Controller
             'updatedAt' => $config->updatedAt?->format('Y-m-d H:i:s'),
             'approvedAt' => $config->approvedAt?->format('Y-m-d H:i:s'),
         ];
+    }
+
+    /**
+     * Assign calls based on team level percentage
+     *
+     * POST /api/cc/team-level-config/assign-calls
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function assignCalls(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'targetDate' => 'required|date',
+                'configId' => 'required|integer|exists:tbl_CcTeamLevelConfig,configId',
+                'assignedBy' => 'required|integer|exists:users,authUserId',
+            ]);
+
+            $targetDate = $request->input('targetDate');
+            $configId = $request->input('configId');
+            $assignedByAuthUserId = $request->input('assignedBy');
+
+            Log::info('Assign calls request received', [
+                'target_date' => $targetDate,
+                'config_id' => $configId,
+                'assigned_by' => $assignedByAuthUserId
+            ]);
+
+            // Execute assignment
+            $assignmentService = app(TeamLevelAssignmentService::class);
+            $result = $assignmentService->assignCallsByTeamLevel(
+                $targetDate,
+                $configId,
+                $assignedByAuthUserId
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Calls assigned successfully',
+                'data' => $result
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to assign calls', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign calls',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

@@ -73,6 +73,13 @@ class AssignDailyCalls extends Command
 
             // Step 2: Process each batch separately
             foreach ($batchIds as $batchId) {
+                // ✅ SKIP batch 1 (past-due) - will be assigned via team level config API
+                if ($batchId == 1) {
+                    $this->warn("  ⏭️  Skipping Batch 1 (past-due) - should be assigned via team level config API");
+                    $this->newLine();
+                    continue;
+                }
+
                 $this->info("📦 Processing Batch {$batchId}");
                 $this->info(str_repeat('-', 60));
 

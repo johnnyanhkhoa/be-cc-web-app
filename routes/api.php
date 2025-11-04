@@ -283,17 +283,20 @@ Route::prefix('cc-batches')->group(function () {
 
 // Team Level Configuration Routes
 Route::prefix('cc/team-level-config')->group(function () {
-    // Get suggested config for target date
-    Route::get('/{targetDate}', [TeamLevelConfigController::class, 'getSuggestedConfig']);
-
     // Get configuration history
     Route::get('/history/list', [TeamLevelConfigController::class, 'getHistory']);
+
+    // Get config for target date
+    Route::get('/{targetDate}', [TeamLevelConfigController::class, 'getSuggestedConfig']);
 
     // Save/Update configuration
     Route::post('/', [TeamLevelConfigController::class, 'saveConfig']);
 
     // Approve configuration
     Route::post('/{configId}/approve', [TeamLevelConfigController::class, 'approveConfig']);
+
+    // NEW: Assign calls based on team level percentage
+    Route::post('/assign-calls', [TeamLevelConfigController::class, 'assignCalls']);
 });
 
 // Reschedule Routes
