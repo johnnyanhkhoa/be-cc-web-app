@@ -293,9 +293,12 @@ class UserController extends Controller
 
     /**
      * Get eligible users for duty roster
-     * Users with call-processing permission and specific level for batch
+     * Returns ALL active users, with their level if assigned for this batch
      *
-     * GET /api/users/eligible-for-duty-roster?batchId=1&level=senior&isActive=true
+     * GET /api/users/eligible-for-duty-roster?batchId=1
+     * GET /api/users/eligible-for-duty-roster?batchId=1&level=senior
+     * GET /api/users/eligible-for-duty-roster?batchId=1&hasLevel=true (chỉ users có level)
+     * GET /api/users/eligible-for-duty-roster?batchId=1&hasLevel=false (chỉ users chưa có level)
      *
      * @param Request $request
      * @return JsonResponse
@@ -306,50 +309,109 @@ class UserController extends Controller
             $request->validate([
                 'batchId' => 'required|integer|min:1',
                 'level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
-                'isActive' => 'nullable|in:true,false,1,0',  // ✅ Accept string
+                'hasLevel' => 'nullable|in:true,false,1,0',  // Filter by có/chưa có level
+                'isActive' => 'nullable|in:true,false,1,0',  // Filter by user active status
             ]);
 
             $batchId = $request->input('batchId');
-            $level = $request->input('level');
+            $levelFilter = $request->input('level');
 
-            // ✅ Convert string to boolean properly
+            $hasLevelParam = $request->input('hasLevel');
+            $hasLevel = $hasLevelParam === null ? null : filter_var($hasLevelParam, FILTER_VALIDATE_BOOLEAN);
+
             $isActiveParam = $request->input('isActive');
             $isActive = $isActiveParam === null ? true : filter_var($isActiveParam, FILTER_VALIDATE_BOOLEAN);
 
             Log::info('Getting eligible users for duty roster', [
                 'batch_id' => $batchId,
-                'level' => $level,
+                'level_filter' => $levelFilter,
+                'has_level' => $hasLevel,
                 'is_active' => $isActive
             ]);
 
-            $userLevels = $this->levelService->getUsersByLevel($batchId, $level, $isActive);
+            // ✅ Step 1: Get ALL active users (không phụ thuộc vào tbl_CcUserLevel)
+            $query = User::where('isActive', $isActive);
 
-            $users = $userLevels->map(function ($userLevel) {
+            // Optional: Add permission check here if needed
+            // $query->where(...)
+
+            $users = $query->orderBy('userFullName', 'asc')->get();
+
+            // ✅ Step 2: Get user levels for this batch
+            $userLevelsQuery = TblCcUserLevel::where('batchId', $batchId)
+                ->where('isActive', true);
+
+            if ($levelFilter) {
+                $userLevelsQuery->where('level', $levelFilter);
+            }
+
+            $userLevels = $userLevelsQuery->get()->keyBy('userId');
+
+            // ✅ Step 3: Combine users with their levels
+            $result = $users->map(function ($user) use ($userLevels, $batchId) {
+                $userLevel = $userLevels->get($user->id);
+
                 return [
-                    'id' => $userLevel->user->id,
-                    'authUserId' => $userLevel->user->authUserId,
-                    'username' => $userLevel->user->username,
-                    'userFullName' => $userLevel->user->userFullName,
-                    'email' => $userLevel->user->email,
-                    'extensionNo' => $userLevel->user->extensionNo,
-                    'level' => $userLevel->level,
-                    'batchId' => $userLevel->batchId,
-                    'isActive' => $userLevel->isActive,
+                    'id' => $user->id,
+                    'authUserId' => $user->authUserId,
+                    'username' => $user->username,
+                    'userFullName' => $user->userFullName,
+                    'email' => $user->email,
+                    'extensionNo' => $user->extensionNo,
+                    'level' => $userLevel?->level ?? null,  // ✅ NULL nếu chưa có level
+                    'batchId' => $batchId,
+                    'hasLevel' => $userLevel !== null,  // ✅ Flag để biết có level chưa
+                    'isActive' => $user->isActive,
                 ];
             });
+
+            // ✅ Step 4: Apply filters
+            if ($levelFilter) {
+                // Filter by specific level
+                $result = $result->filter(function ($user) use ($levelFilter) {
+                    return $user['level'] === $levelFilter;
+                });
+            }
+
+            if ($hasLevel !== null) {
+                // Filter by có/chưa có level
+                $result = $result->filter(function ($user) use ($hasLevel) {
+                    return $user['hasLevel'] === $hasLevel;
+                });
+            }
+
+            $result = $result->values(); // Re-index array
+
+            Log::info('Eligible users retrieved', [
+                'total' => $result->count(),
+                'with_level' => $result->where('hasLevel', true)->count(),
+                'without_level' => $result->where('hasLevel', false)->count()
+            ]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Eligible users retrieved successfully',
                 'data' => [
-                    'users' => $users,
-                    'total' => $users->count(),
+                    'users' => $result,
+                    'total' => $result->count(),
+                    'summary' => [
+                        'withLevel' => $result->where('hasLevel', true)->count(),
+                        'withoutLevel' => $result->where('hasLevel', false)->count(),
+                    ]
                 ]
             ], 200);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+
         } catch (Exception $e) {
             Log::error('Failed to get eligible users', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
