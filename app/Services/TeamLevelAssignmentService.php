@@ -116,7 +116,9 @@ class TeamLevelAssignmentService
         ];
 
         foreach ($dutyRosters as $roster) {
-            $level = $roster->user->level ?? null;
+            // ✅ Get level from tbl_CcUserLevel for batchId 1
+            $level = \App\Models\TblCcUserLevel::getActiveLevel($roster->user->id, 1);
+
             if ($level && isset($agentsByLevel[$level])) {
                 $agentsByLevel[$level][] = $roster->user;
             }

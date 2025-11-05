@@ -96,17 +96,19 @@ Route::prefix('call-assignments')->group(function () {
 
 // User Management Routes
 Route::prefix('users')->group(function () {
-    // Get eligible users for duty roster (with call-processing permission)
+    // ✅ QUAN TRỌNG: Các route cụ thể phải đặt TRƯỚC route có parameter
+
+    // Get eligible users for duty roster
     Route::get('/eligible-for-duty-roster', [UserController::class, 'getEligibleUsersForDutyRoster']);
 
-    // Existing route
-    Route::get('/available-for-assign', [UserController::class, 'getAvailableUsersForAssign']);
-
-    // Get all users with optional filters
-    Route::get('/', [UserController::class, 'index']);
-
-    // NEW: Batch update user levels
+    // Batch update user levels
     Route::post('/batch-update-levels', [UserController::class, 'batchUpdateLevels']);
+
+    // Get all users - PHẢI ĐẶT SAU eligible-for-duty-roster
+    Route::get('/', [UserController::class, 'index']);  // ← CHECK XEM CÓ DÒNG NÀY KHÔNG
+
+    // Get user level history
+    Route::get('/{userId}/level-history', [UserController::class, 'getLevelHistory']);
 
     // Update user level
     Route::put('/{userId}/level', [UserController::class, 'updateLevel']);

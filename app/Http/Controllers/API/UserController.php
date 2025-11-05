@@ -13,19 +13,23 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use App\Models\TblCcUserLevel;  // ← THÊM
+use App\Services\UserLevelService;  // ← THÊM
 
 class UserController extends Controller
 {
     protected $permissionService;
-
     protected $userManagementService;
+    protected $levelService;  // ← THÊM
 
     public function __construct(
         UserPermissionService $permissionService,
-        UserManagementService $userManagementService
+        UserManagementService $userManagementService,
+        UserLevelService $levelService  // ← THÊM
     ) {
         $this->permissionService = $permissionService;
         $this->userManagementService = $userManagementService;
+        $this->levelService = $levelService;  // ← THÊM
     }
 
     /**
@@ -289,10 +293,9 @@ class UserController extends Controller
 
     /**
      * Get eligible users for duty roster
-     * Users with call-processing permission and isActive = true
+     * Users with call-processing permission and specific level for batch
      *
-     * GET /api/users/eligible-for-duty-roster
-     * GET /api/users/eligible-for-duty-roster?refresh=true (bypass cache)
+     * GET /api/users/eligible-for-duty-roster?batchId=1&level=senior&isActive=true
      *
      * @param Request $request
      * @return JsonResponse
@@ -300,51 +303,60 @@ class UserController extends Controller
     public function getEligibleUsersForDutyRoster(Request $request): JsonResponse
     {
         try {
-            // Get access token from Authorization header
-            $authHeader = $request->header('Authorization');
-
-            if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Access token is required',
-                    'error' => 'Missing or invalid Authorization header'
-                ], 401);
-            }
-
-            $accessToken = substr($authHeader, 7);
-
-            // Check if refresh is requested (bypass cache)
-            $refresh = $request->query('refresh') === 'true';
-
-            Log::info('Get eligible users for duty roster', [
-                'refresh' => $refresh,
+            $request->validate([
+                'batchId' => 'required|integer|min:1',
+                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'isActive' => 'nullable|in:true,false,1,0',  // ✅ Accept string
             ]);
 
-            // Get users (with or without cache)
-            $users = $refresh
-                ? $this->userManagementService->refreshEligibleUsers($accessToken)
-                : $this->userManagementService->getEligibleUsersForDutyRoster($accessToken);
+            $batchId = $request->input('batchId');
+            $level = $request->input('level');
+
+            // ✅ Convert string to boolean properly
+            $isActiveParam = $request->input('isActive');
+            $isActive = $isActiveParam === null ? true : filter_var($isActiveParam, FILTER_VALIDATE_BOOLEAN);
+
+            Log::info('Getting eligible users for duty roster', [
+                'batch_id' => $batchId,
+                'level' => $level,
+                'is_active' => $isActive
+            ]);
+
+            $userLevels = $this->levelService->getUsersByLevel($batchId, $level, $isActive);
+
+            $users = $userLevels->map(function ($userLevel) {
+                return [
+                    'id' => $userLevel->user->id,
+                    'authUserId' => $userLevel->user->authUserId,
+                    'username' => $userLevel->user->username,
+                    'userFullName' => $userLevel->user->userFullName,
+                    'email' => $userLevel->user->email,
+                    'extensionNo' => $userLevel->user->extensionNo,
+                    'level' => $userLevel->level,
+                    'batchId' => $userLevel->batchId,
+                    'isActive' => $userLevel->isActive,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Eligible users retrieved successfully',
-                'data' => $users,
-                'total' => count($users),
-                'cached' => !$refresh,
+                'data' => [
+                    'users' => $users,
+                    'total' => $users->count(),
+                ]
             ], 200);
 
         } catch (Exception $e) {
-            $statusCode = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500;
-
             Log::error('Failed to get eligible users', [
-                'error' => $e->getMessage(),
+                'error' => $e->getMessage()
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to get eligible users',
-                'error' => $e->getMessage(),
-            ], $statusCode);
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -352,6 +364,9 @@ class UserController extends Controller
      * Get all users with their levels
      *
      * GET /api/users
+     * GET /api/users?batchId=1&level=senior&isActive=true (users ĐANG là senior)
+     * GET /api/users?batchId=1&level=senior&isActive=false (users TỪNG là senior)
+     * GET /api/users?batchId=1&level=senior (users ĐANG hoặc TỪNG là senior)
      *
      * @param Request $request
      * @return JsonResponse
@@ -359,28 +374,44 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            // Optional filters
-            $level = $request->query('level'); // Filter by level
-            $isActive = $request->query('isActive'); // Filter by active status
-            $search = $request->query('search'); // Search by name/username/email
+            $request->validate([
+                'batchId' => 'nullable|integer|min:1',
+                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'levelIsActive' => 'nullable|in:true,false,1,0',
+                'isActive' => 'nullable|in:true,false,1,0',
+                'search' => 'nullable|string',
+            ]);
+
+            $batchId = $request->query('batchId');
+            $levelFilter = $request->query('level');
+
+            // levelIsActive để filter level history
+            $levelIsActiveParam = $request->query('levelIsActive');
+            $levelIsActive = $levelIsActiveParam === null ? null : filter_var($levelIsActiveParam, FILTER_VALIDATE_BOOLEAN);
+
+            // isActive để filter user status
+            $userIsActiveParam = $request->query('isActive');
+            $userIsActive = $userIsActiveParam === null ? null : filter_var($userIsActiveParam, FILTER_VALIDATE_BOOLEAN);
+
+            $search = $request->query('search');
 
             Log::info('Getting all users with filters', [
-                'level' => $level,
-                'isActive' => $isActive,
+                'batch_id' => $batchId,
+                'level' => $levelFilter,
+                'level_is_active' => $levelIsActive,
+                'user_is_active' => $userIsActive,
                 'search' => $search
             ]);
 
+            // ✅ Build query
             $query = User::query();
 
-            // Apply filters
-            if ($level) {
-                $query->where('level', $level);
+            // Filter by user active status
+            if ($userIsActive !== null) {
+                $query->where('isActive', $userIsActive);
             }
 
-            if ($isActive !== null) {
-                $query->where('isActive', filter_var($isActive, FILTER_VALIDATE_BOOLEAN));
-            }
-
+            // Filter by search
             if ($search) {
                 $query->where(function($q) use ($search) {
                     $q->where('userFullName', 'ILIKE', "%{$search}%")
@@ -389,23 +420,63 @@ class UserController extends Controller
                 });
             }
 
+            // ✅ Filter by level if batchId and level provided
+            if ($batchId && $levelFilter) {
+                $levelQuery = TblCcUserLevel::where('batchId', $batchId)
+                    ->where('level', $levelFilter);
+
+                // Filter by level active status
+                if ($levelIsActive !== null) {
+                    $levelQuery->where('isActive', $levelIsActive);
+                }
+
+                $userIdsWithLevel = $levelQuery->pluck('userId')->unique()->toArray();
+
+                if (!empty($userIdsWithLevel)) {
+                    $query->whereIn('id', $userIdsWithLevel);
+                } else {
+                    // No users found with this level
+                    $query->whereRaw('1 = 0'); // Return empty result
+                }
+            }
+
             $users = $query->orderBy('userFullName', 'asc')->get();
 
+            // ✅ Get user levels for specific batch if provided
+            $userLevels = [];
+            if ($batchId) {
+                $levels = TblCcUserLevel::where('batchId', $batchId)
+                    ->where('isActive', true)
+                    ->get()
+                    ->keyBy('userId');
+
+                foreach ($levels as $userId => $levelRecord) {
+                    $userLevels[$userId] = $levelRecord->level;
+                }
+            }
+
             // Format response
-            $formattedUsers = $users->map(function($user) {
-                return [
+            $formattedUsers = $users->map(function($user) use ($batchId, $userLevels) {
+                $data = [
                     'id' => $user->id,
                     'authUserId' => $user->authUserId,
                     'username' => $user->username,
                     'userFullName' => $user->userFullName,
                     'email' => $user->email,
                     'extensionNo' => $user->extensionNo,
-                    'level' => $user->level,
                     'isActive' => $user->isActive,
                     'lastLoginAt' => $user->lastLoginAt?->format('Y-m-d H:i:s'),
                     'createdAt' => $user->createdAt?->format('Y-m-d H:i:s'),
                     'updatedAt' => $user->updatedAt?->format('Y-m-d H:i:s'),
                 ];
+
+                // Add current level if batchId provided
+                if ($batchId) {
+                    $data['currentLevel'] = $userLevels[$user->id] ?? null;
+                    $data['batchId'] = $batchId;
+                }
+
+                return $data;
             });
 
             Log::info('Users retrieved successfully', [
@@ -418,6 +489,13 @@ class UserController extends Controller
                 'data' => $formattedUsers,
                 'total' => $users->count()
             ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
 
         } catch (Exception $e) {
             Log::error('Failed to get users', [
@@ -434,106 +512,79 @@ class UserController extends Controller
     }
 
    /**
-     * Update user level
+     * Update user level for a specific batch
      *
      * PUT /api/users/{userId}/level
      *
-     * @param Request $request
-     * @param int $userId
-     * @return JsonResponse
+     * Body: {
+     *   "batchId": 1,
+     *   "level": "senior",
+     *   "updatedBy": 80
+     * }
      */
     public function updateLevel(Request $request, int $userId): JsonResponse
     {
         try {
             $request->validate([
+                'batchId' => 'required|integer|min:1',
                 'level' => 'required|string|in:team-leader,senior,mid-level,junior',
                 'updatedBy' => 'required|integer|exists:users,authUserId',
             ]);
 
+            $batchId = $request->input('batchId');
             $level = $request->input('level');
             $updatedByAuthUserId = $request->input('updatedBy');
 
-            Log::info('Updating user level', [
-                'user_id' => $userId,
-                'new_level' => $level,
-                'updated_by_auth_user_id' => $updatedByAuthUserId
-            ]);
-
-            // Find the updater user by authUserId to get local id
+            // Get updater user
             $updaterUser = User::where('authUserId', $updatedByAuthUserId)->first();
-
             if (!$updaterUser) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Updater user not found',
-                    'error' => "No user found with authUserId {$updatedByAuthUserId}"
                 ], 404);
             }
 
-            // Find user to update
-            $user = User::find($userId);
-
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not found',
-                    'error' => "No user found with ID {$userId}"
-                ], 404);
-            }
-
-            // Update level and updatedBy
-            $oldLevel = $user->level;
-            $user->level = $level;
-            $user->updatedBy = $updaterUser->id; // Use local id
-            $user->save();
-
-            Log::info('User level updated successfully', [
-                'user_id' => $userId,
-                'username' => $user->username,
-                'old_level' => $oldLevel,
-                'new_level' => $level,
-                'updated_by_id' => $updaterUser->id
-            ]);
+            // Set level using service
+            $userLevel = $this->levelService->setUserLevel(
+                $userId,
+                $batchId,
+                $level,
+                $updaterUser->id
+            );
 
             return response()->json([
                 'success' => true,
                 'message' => 'User level updated successfully',
                 'data' => [
-                    'id' => $user->id,
-                    'authUserId' => $user->authUserId,
-                    'username' => $user->username,
-                    'userFullName' => $user->userFullName,
-                    'email' => $user->email,
-                    'level' => $user->level,
-                    'previousLevel' => $oldLevel,
-                    'updatedBy' => [
-                        'id' => $updaterUser->id,
-                        'authUserId' => $updaterUser->authUserId,
-                        'username' => $updaterUser->username,
-                        'userFullName' => $updaterUser->userFullName,
+                    'userLevelId' => $userLevel->userLevelId,
+                    'userId' => $userLevel->userId,
+                    'user' => [
+                        'id' => $userLevel->user->id,
+                        'authUserId' => $userLevel->user->authUserId,
+                        'username' => $userLevel->user->username,
+                        'userFullName' => $userLevel->user->userFullName,
                     ],
-                    'updatedAt' => $user->updatedAt->format('Y-m-d H:i:s')
+                    'batchId' => $userLevel->batchId,
+                    'level' => $userLevel->level,
+                    'isActive' => $userLevel->isActive,
+                    'createdBy' => $userLevel->creator ? [
+                        'id' => $userLevel->creator->id,
+                        'username' => $userLevel->creator->username,
+                        'userFullName' => $userLevel->creator->userFullName,
+                    ] : null,
+                    'createdAt' => $userLevel->createdAt->format('Y-m-d H:i:s'),
                 ]
             ], 200);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
 
         } catch (Exception $e) {
             Log::error('Failed to update user level', [
                 'user_id' => $userId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update user level',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -544,154 +595,102 @@ class UserController extends Controller
      * POST /api/users/batch-update-levels
      *
      * Body: {
+     *   "batchId": 1,
      *   "updates": [
      *     { "userId": 7, "level": "senior" },
-     *     { "userId": 5, "level": "junior" },
-     *     { "userId": 9, "level": null }
+     *     { "userId": 5, "level": "junior" }
      *   ],
-     *   "updatedBy": 1
+     *   "updatedBy": 80
      * }
-     *
-     * @param Request $request
-     * @return JsonResponse
      */
     public function batchUpdateLevels(Request $request): JsonResponse
     {
         try {
             $request->validate([
+                'batchId' => 'required|integer|min:1',
                 'updates' => 'required|array|min:1',
                 'updates.*.userId' => 'required|integer|exists:users,id',
-                'updates.*.level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'updates.*.level' => 'required|string|in:team-leader,senior,mid-level,junior',
                 'updatedBy' => 'required|integer|exists:users,authUserId',
             ]);
 
+            $batchId = $request->input('batchId');
             $updates = $request->input('updates');
             $updatedByAuthUserId = $request->input('updatedBy');
 
-            Log::info('Batch updating user levels', [
-                'total_updates' => count($updates),
-                'updated_by_auth_user_id' => $updatedByAuthUserId
-            ]);
-
-            // Find the updater user by authUserId to get local id
+            // Get updater user
             $updaterUser = User::where('authUserId', $updatedByAuthUserId)->first();
 
-            if (!$updaterUser) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Updater user not found',
-                    'error' => "No user found with authUserId {$updatedByAuthUserId}"
-                ], 404);
-            }
-
-            DB::beginTransaction();
-
-            $results = [];
-            $successCount = 0;
-            $failCount = 0;
-
-            foreach ($updates as $update) {
-                $userId = $update['userId'];
-                $level = $update['level'] ?? null;
-
-                try {
-                    $user = User::find($userId);
-
-                    if (!$user) {
-                        $results[] = [
-                            'userId' => $userId,
-                            'success' => false,
-                            'error' => 'User not found'
-                        ];
-                        $failCount++;
-                        continue;
-                    }
-
-                    $oldLevel = $user->level;
-                    $user->level = $level;
-                    $user->updatedBy = $updaterUser->id; // Use local id
-                    $user->save();
-
-                    $results[] = [
-                        'userId' => $userId,
-                        'authUserId' => $user->authUserId,
-                        'username' => $user->username,
-                        'userFullName' => $user->userFullName,
-                        'previousLevel' => $oldLevel,
-                        'newLevel' => $level,
-                        'success' => true
-                    ];
-                    $successCount++;
-
-                    Log::info('User level updated in batch', [
-                        'user_id' => $userId,
-                        'username' => $user->username,
-                        'old_level' => $oldLevel,
-                        'new_level' => $level
-                    ]);
-
-                } catch (Exception $e) {
-                    $results[] = [
-                        'userId' => $userId,
-                        'success' => false,
-                        'error' => $e->getMessage()
-                    ];
-                    $failCount++;
-
-                    Log::error('Failed to update user in batch', [
-                        'user_id' => $userId,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            Log::info('Batch update completed', [
-                'total' => count($updates),
-                'success' => $successCount,
-                'failed' => $failCount
-            ]);
+            // Execute batch update
+            $result = $this->levelService->batchUpdateLevels($batchId, $updates, $updaterUser->id);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Batch update completed',
-                'data' => [
-                    'results' => $results,
-                    'summary' => [
-                        'total' => count($updates),
-                        'successful' => $successCount,
-                        'failed' => $failCount
-                    ],
-                    'updatedBy' => [
-                        'id' => $updaterUser->id,
-                        'authUserId' => $updaterUser->authUserId,
-                        'username' => $updaterUser->username,
-                        'userFullName' => $updaterUser->userFullName,
-                    ]
-                ]
+                'data' => $result
             ], 200);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-
         } catch (Exception $e) {
-            DB::rollBack();
-
             Log::error('Batch update failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Batch update failed',
-                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get user level history
+     *
+     * GET /api/users/{userId}/level-history?batchId=1
+     */
+    public function getLevelHistory(Request $request, int $userId): JsonResponse
+    {
+        try {
+            $request->validate([
+                'batchId' => 'required|integer|min:1',
+            ]);
+
+            $batchId = $request->input('batchId');
+
+            $history = $this->levelService->getUserLevelHistory($userId, $batchId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Level history retrieved successfully',
+                'data' => $history->map(function ($record) {
+                    return [
+                        'userLevelId' => $record->userLevelId,
+                        'level' => $record->level,
+                        'isActive' => $record->isActive,
+                        'createdBy' => $record->creator ? [
+                            'username' => $record->creator->username,
+                            'userFullName' => $record->creator->userFullName,
+                        ] : null,
+                        'updatedBy' => $record->updater ? [
+                            'username' => $record->updater->username,
+                            'userFullName' => $record->updater->userFullName,
+                        ] : null,
+                        'createdAt' => $record->createdAt->format('Y-m-d H:i:s'),
+                        'updatedAt' => $record->updatedAt?->format('Y-m-d H:i:s'),
+                    ];
+                })
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to get level history', [
+                'user_id' => $userId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get level history',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

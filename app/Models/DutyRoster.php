@@ -129,7 +129,8 @@ class DutyRoster extends Model
     {
         Log::info('Getting duty roster data', [
             'start_date' => $startDate,
-            'end_date' => $endDate
+            'end_date' => $endDate,
+            'batch_id' => $batchId
         ]);
 
         $query = static::with('user')
@@ -137,7 +138,6 @@ class DutyRoster extends Model
             ->where('work_date', '<=', $endDate)
             ->where('is_working', true);
 
-        // Filter by batchId if provided
         if ($batchId !== null) {
             $query->where('batchId', $batchId);
         }
@@ -158,13 +158,19 @@ class DutyRoster extends Model
 
         while ($current <= $end) {
             $dateStr = $current->toDateString();
-            $agents = $groupedDuties->get($dateStr, collect())->map(function ($duty) {
+            $agents = $groupedDuties->get($dateStr, collect())->map(function ($duty) use ($batchId) {
+                // ✅ Get level from tbl_CcUserLevel for this batch
+                $level = null;
+                if ($batchId) {
+                    $level = \App\Models\TblCcUserLevel::getActiveLevel($duty->user->id, $batchId);
+                }
+
                 return [
                     'authUserId' => $duty->user->authUserId,
                     'name' => $duty->user->userFullName,
                     'email' => $duty->user->email,
                     'username' => $duty->user->username,
-                    'level' => $duty->user->level,  // ← THÊM DÒNG NÀY
+                    'level' => $level,  // ✅ Level for this batch
                 ];
             });
 
