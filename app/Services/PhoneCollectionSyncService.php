@@ -202,6 +202,7 @@ class PhoneCollectionSyncService
                     'customerFullName' => $contract['customerFullName'],
                     'gender' => $this->mapGender($contract['gender']),
                     'birthDate' => $contract['birthDate'],
+                    'customerAge' => $contract['customerAge'] ?? null,
                     'assetId' => $contract['assetId'],
                     'paymentId' => $contract['paymentId'],
                     'paymentNo' => $contract['paymentNo'],
