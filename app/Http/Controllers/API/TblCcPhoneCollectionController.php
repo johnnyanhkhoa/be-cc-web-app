@@ -295,6 +295,7 @@ class TblCcPhoneCollectionController extends Controller
                     'contractNo' => $pc->contractNo,
                     'customerId' => $pc->customerId,
                     'customerFullName' => $pc->customerFullName,
+                    'customerAge' => $pc->customerAge,
                     'gender' => $pc->gender,
                     'hasKYCAppAccount' => $pc->hasKYCAppAccount,
                     'contractDate' => $pc->contractDate->format('Y-m-d'),
