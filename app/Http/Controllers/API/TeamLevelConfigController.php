@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\TblCcTeamLevelConfig;
+use App\Models\TblCcUserLevel;
 use App\Models\User;
 use App\Services\TeamLevelConfigService;
 use App\Services\TeamLevelAssignmentService;
@@ -345,6 +346,12 @@ class TeamLevelConfigController extends Controller
      */
     private function formatConfigResponse(TblCcTeamLevelConfig $config): array
     {
+        // ✅ Get users by level for this batch (only users in duty roster)
+        $usersByLevel = $this->getUsersByLevelForBatch(
+            $config->batchId,
+            $config->targetDate->toDateString()
+        );
+
         return [
             'configId' => $config->configId,
             'targetDate' => $config->targetDate->format('Y-m-d'),
@@ -363,6 +370,8 @@ class TeamLevelConfigController extends Controller
                 'midLevel' => (float) $config->midLevelPercentage,
                 'junior' => (float) $config->juniorPercentage,
             ],
+            // ✅ THÊM: Users by level
+            'agentsByLevel' => $usersByLevel,
             'configType' => $config->configType,
             'isActive' => $config->isActive,
             'isAssigned' => $config->isAssigned,
@@ -384,6 +393,89 @@ class TeamLevelConfigController extends Controller
             'updatedAt' => $config->updatedAt?->format('Y-m-d H:i:s'),
             'approvedAt' => $config->approvedAt?->format('Y-m-d H:i:s'),
         ];
+    }
+
+    /**
+     * Get users grouped by level for a specific batch
+     * ONLY returns users who are in duty roster for the target date
+     *
+     * @param int $batchId
+     * @param string $targetDate
+     * @return array
+     */
+    private function getUsersByLevelForBatch(int $batchId, string $targetDate): array
+    {
+        // ✅ Step 1: Get users in duty roster for this date and batch
+        $dutyRosterUsers = \App\Models\DutyRoster::where('work_date', $targetDate)
+            ->where('batchId', $batchId)
+            ->where('is_working', true)
+            ->pluck('user_id')
+            ->toArray();
+
+        if (empty($dutyRosterUsers)) {
+            return [
+                'teamLeader' => [],
+                'senior' => [],
+                'midLevel' => [],
+                'junior' => [],
+            ];
+        }
+
+        Log::info('Users in duty roster', [
+            'target_date' => $targetDate,
+            'batch_id' => $batchId,
+            'user_ids' => $dutyRosterUsers,
+            'count' => count($dutyRosterUsers)
+        ]);
+
+        // ✅ Step 2: Get user levels ONLY for users in duty roster
+        $userLevels = \App\Models\TblCcUserLevel::with('user')
+            ->where('batchId', $batchId)
+            ->where('isActive', true)
+            ->whereIn('userId', $dutyRosterUsers)  // ✅ CHỈ lấy users trong duty roster
+            ->get();
+
+        // Group by level
+        $grouped = [
+            'teamLeader' => [],
+            'senior' => [],
+            'midLevel' => [],
+            'junior' => [],
+        ];
+
+        foreach ($userLevels as $userLevel) {
+            $user = $userLevel->user;
+
+            if (!$user) {
+                continue;
+            }
+
+            $userData = [
+                'id' => $user->id,
+                'authUserId' => $user->authUserId,
+                'username' => $user->username,
+                'userFullName' => $user->userFullName,
+                'email' => $user->email,
+            ];
+
+            // Map level to camelCase keys
+            switch ($userLevel->level) {
+                case 'team-leader':
+                    $grouped['teamLeader'][] = $userData;
+                    break;
+                case 'senior':
+                    $grouped['senior'][] = $userData;
+                    break;
+                case 'mid-level':
+                    $grouped['midLevel'][] = $userData;
+                    break;
+                case 'junior':
+                    $grouped['junior'][] = $userData;
+                    break;
+            }
+        }
+
+        return $grouped;
     }
 
     /**
