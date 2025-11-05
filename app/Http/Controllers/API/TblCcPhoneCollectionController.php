@@ -306,6 +306,7 @@ class TblCcPhoneCollectionController extends Controller
                     'daysOverdueGross' => $pc->daysOverdueGross,
                     'daysOverdueNet' => $pc->daysOverdueNet,
                     'totalAmount' => $pc->totalAmount,
+                    'penaltyAmount' => $pc->penaltyAmount,
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
                     'batchCode' => $pc->batch?->code, // NEW: Batch code from relationship
