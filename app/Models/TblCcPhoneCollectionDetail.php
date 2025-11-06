@@ -39,6 +39,7 @@ class TblCcPhoneCollectionDetail extends Model
         'contactRelation',
         'callStatus',
         'callResultId',
+        'reasonId',
         'leaveMessage',
         'remark',
         'promisedPaymentDate',

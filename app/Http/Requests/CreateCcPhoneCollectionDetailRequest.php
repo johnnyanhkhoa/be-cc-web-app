@@ -36,6 +36,7 @@ class CreateCcPhoneCollectionDetailRequest extends FormRequest
             // Call Information
             'callStatus' => ['nullable', 'string', 'in:reached,ring,busy,cancelled,power_off,wrong_number,no_contact'],
             'callResultId' => ['nullable', 'integer', 'exists:tbl_CcCaseResult,caseResultId'],
+            'reasonId' => ['nullable', 'integer', 'exists:tbl_CcReason,reasonId'],
             'leaveMessage' => ['nullable', 'string'],
             'remark' => ['nullable', 'string'],
 
