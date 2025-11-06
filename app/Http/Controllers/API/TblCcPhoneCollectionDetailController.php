@@ -159,7 +159,7 @@ class TblCcPhoneCollectionDetailController extends Controller
             }
 
             // Get call attempts with relationships
-            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'uploadImages'])
+            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'reason', 'uploadImages'])
                 ->byPhoneCollectionId($phoneCollectionId)
                 ->orderBy('createdAt', 'desc')
                 ->get();
@@ -197,6 +197,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                     'callStatus' => $attempt->callStatus,
                     'callResultId' => $attempt->callResultId,
                     'reasonId' => $attempt->reasonId,
+                    'reasonName' => $attempt->reason?->reasonName,           // ← THÊM DÒNG NÀY
+                    'reasonRemark' => $attempt->reason?->reasonRemark,
                     'leaveMessage' => $attempt->leaveMessage,
                     'remark' => $attempt->remark,
                     'promisedPaymentDate' => $attempt->promisedPaymentDate?->format('Y-m-d'),

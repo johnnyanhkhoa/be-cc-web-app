@@ -175,6 +175,14 @@ class TblCcPhoneCollectionDetail extends Model
     }
 
     /**
+     * Relationship with TblCcReason
+     */
+    public function reason()
+    {
+        return $this->belongsTo(TblCcReason::class, 'reasonId', 'reasonId');
+    }
+
+    /**
      * Relationship with User (creator)
      */
     public function creator()
