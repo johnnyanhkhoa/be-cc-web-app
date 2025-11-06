@@ -346,7 +346,7 @@ class TeamLevelConfigController extends Controller
      */
     private function formatConfigResponse(TblCcTeamLevelConfig $config): array
     {
-        // ✅ Get users by level for this batch (only users in duty roster)
+        // Get users by level for this batch
         $usersByLevel = $this->getUsersByLevelForBatch(
             $config->batchId,
             $config->targetDate->toDateString()
@@ -370,8 +370,8 @@ class TeamLevelConfigController extends Controller
                 'midLevel' => (float) $config->midLevelPercentage,
                 'junior' => (float) $config->juniorPercentage,
             ],
-            // ✅ THÊM: Users by level
             'agentsByLevel' => $usersByLevel,
+            'assignmentsByUser' => $config->assignmentsByUser,  // ✅ THÊM
             'configType' => $config->configType,
             'isActive' => $config->isActive,
             'isAssigned' => $config->isAssigned,
@@ -548,6 +548,60 @@ class TeamLevelConfigController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to assign calls',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview call assignments based on team level percentage
+     * Does NOT actually assign - just shows what would happen
+     *
+     * POST /api/cc/team-level-config/preview-assignment
+     *
+     * Body: {
+     *   "targetDate": "2025-11-04",
+     *   "configId": 5
+     * }
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function previewAssignment(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'targetDate' => 'required|date',
+                'configId' => 'required|integer|exists:tbl_CcTeamLevelConfig,configId',
+            ]);
+
+            $targetDate = $request->input('targetDate');
+            $configId = $request->input('configId');
+
+            Log::info('Preview assignment request received', [
+                'target_date' => $targetDate,
+                'config_id' => $configId
+            ]);
+
+            // Execute preview (no database changes)
+            $assignmentService = app(TeamLevelAssignmentService::class);
+            $result = $assignmentService->previewAssignment($targetDate, $configId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Assignment preview generated successfully',
+                'data' => $result
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to preview assignment', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to preview assignment',
                 'error' => $e->getMessage()
             ], 500);
         }

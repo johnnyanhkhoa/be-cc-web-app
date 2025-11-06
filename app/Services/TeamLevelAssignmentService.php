@@ -83,6 +83,27 @@ class TeamLevelAssignmentService
                 'assignments_by_user' => $this->summarizeByUser($assignments),
             ];
 
+            // ✅ Save assignments to config
+            $assignmentsByUser = $this->summarizeByUser($assignments);
+
+            $config = TblCcTeamLevelConfig::find($configId);
+            if ($config) {
+                $config->assignmentsByUser = $assignmentsByUser;
+                $config->save();
+
+                Log::info('Assignments saved to config', [
+                    'config_id' => $configId,
+                    'users_count' => count($assignmentsByUser)
+                ]);
+            }
+
+            return [
+                'success' => true,
+                'total_assigned' => count($assignments),
+                'assignments_by_level' => $this->summarizeByLevel($assignments),
+                'assignments_by_user' => $assignmentsByUser,
+            ];
+
         } catch (Exception $e) {
             Log::error('Team level assignment failed', [
                 'target_date' => $targetDate,
@@ -302,6 +323,135 @@ class TeamLevelAssignmentService
             DB::rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Simulate assignment without saving to database
+     *
+     * @param TblCcTeamLevelConfig $config
+     * @param array $agentsByLevel
+     * @param \Illuminate\Support\Collection $callsByDpd
+     * @return array
+     */
+    private function simulateAssignment($config, $agentsByLevel, $callsByDpd): array
+    {
+        $assignments = [];
+        $percentages = [
+            'team-leader' => $config->teamLeaderPercentage,
+            'senior' => $config->seniorPercentage,
+            'mid-level' => $config->midLevelPercentage,
+            'junior' => $config->juniorPercentage,
+        ];
+
+        // Calculate TOTAL allocation for each level
+        $allCalls = $callsByDpd->flatten();
+        $totalCalls = $allCalls->count();
+
+        $totalAllocations = $this->calculateAllocations($totalCalls, $percentages);
+
+        // Track remaining quota for each level
+        $remainingQuota = $totalAllocations;
+
+        // Calculate allocations for each DPD group
+        $levelDpdAllocations = [];
+
+        foreach ($callsByDpd as $dpd => $dpdCalls) {
+            $dpdCount = $dpdCalls->count();
+
+            $dpdAllocations = $this->calculateAllocations($dpdCount, $percentages);
+
+            foreach ($dpdAllocations as $level => $count) {
+                $actualCount = min($count, $remainingQuota[$level]);
+
+                if (!isset($levelDpdAllocations[$level])) {
+                    $levelDpdAllocations[$level] = [];
+                }
+
+                $levelDpdAllocations[$level][$dpd] = $actualCount;
+            }
+        }
+
+        $levelDpdAllocations = $this->adjustAllocationsToQuota($levelDpdAllocations, $remainingQuota, $callsByDpd);
+
+        // Simulate assignments (WITHOUT saving to database)
+        foreach ($callsByDpd as $dpd => $dpdCalls) {
+            foreach (['team-leader', 'senior', 'mid-level', 'junior'] as $level) {
+                $count = $levelDpdAllocations[$level][$dpd] ?? 0;
+
+                if ($count <= 0) {
+                    continue;
+                }
+
+                $users = $agentsByLevel[$level] ?? [];
+
+                if (empty($users)) {
+                    continue;
+                }
+
+                // Take calls from this DPD group
+                $callsForLevel = $dpdCalls->take($count);
+
+                // Round-robin assign to users within level
+                $userIndex = 0;
+                foreach ($callsForLevel as $call) {
+                    $user = $users[$userIndex];
+
+                    // ✅ Just simulate - DON'T actually update
+                    $assignments[] = [
+                        'phoneCollectionId' => $call->phoneCollectionId,
+                        'contractNo' => $call->contractNo,
+                        'dpd' => $dpd,
+                        'level' => $level,
+                        'user_id' => $user->id,
+                        'user_auth_user_id' => $user->authUserId,
+                        'user_name' => $user->userFullName,
+                    ];
+
+                    $userIndex = ($userIndex + 1) % count($users);
+                    $remainingQuota[$level]--;
+                }
+
+                // Remove assigned calls from collection for next iteration
+                $dpdCalls->splice(0, $count);
+            }
+        }
+
+        // Handle leftover calls
+        $leftoverCalls = collect();
+        foreach ($callsByDpd as $dpd => $dpdCalls) {
+            if ($dpdCalls->isNotEmpty()) {
+                $leftoverCalls = $leftoverCalls->merge($dpdCalls);
+            }
+        }
+
+        if ($leftoverCalls->isNotEmpty()) {
+            $allUsers = collect($agentsByLevel)->flatten(1)->values()->all();
+
+            if (!empty($allUsers)) {
+                $userIndex = 0;
+                foreach ($leftoverCalls as $call) {
+                    $user = $allUsers[$userIndex];
+
+                    $assignments[] = [
+                        'phoneCollectionId' => $call->phoneCollectionId,
+                        'contractNo' => $call->contractNo,
+                        'dpd' => $call->daysOverdueGross,
+                        'level' => $user->level ?? 'unknown',
+                        'user_id' => $user->id,
+                        'user_auth_user_id' => $user->authUserId,
+                        'user_name' => $user->userFullName,
+                    ];
+
+                    $userIndex = ($userIndex + 1) % count($allUsers);
+                }
+            }
+        }
+
+        return [
+            'total_assigned' => count($assignments),
+            'assignments_by_level' => $this->summarizeByLevel($assignments),
+            'assignments_by_user' => $this->summarizeByUser($assignments),
+        ];
     }
 
     /**
@@ -525,5 +675,98 @@ class TeamLevelAssignmentService
         ]);
 
         return $assignments;
+    }
+
+    /**
+     * Preview assignment without actually assigning calls
+     * Returns what WOULD happen if we assign with this config
+     *
+     * @param string $targetDate
+     * @param int $configId
+     * @return array
+     * @throws Exception
+     */
+    public function previewAssignment(string $targetDate, int $configId): array
+    {
+        try {
+            Log::info('Previewing team level assignment', [
+                'target_date' => $targetDate,
+                'config_id' => $configId
+            ]);
+
+            // 1. Get config
+            $config = TblCcTeamLevelConfig::find($configId);
+
+            if (!$config) {
+                throw new Exception("Config with ID {$configId} not found");
+            }
+
+            // ✅ Allow both suggested and approved configs for preview
+            if (!in_array($config->configType, [TblCcTeamLevelConfig::TYPE_SUGGESTED, TblCcTeamLevelConfig::TYPE_APPROVED])) {
+                throw new Exception("Invalid config type for preview");
+            }
+
+            // 2. Get duty roster agents grouped by level
+            $agentsByLevel = $this->getAgentsByLevel($targetDate);
+
+            if (empty(array_filter($agentsByLevel))) {
+                throw new Exception("No agents found in duty roster for this date");
+            }
+
+            // 3. Get unassigned calls for batchId = 1, grouped by DPD
+            $callsByDpd = $this->getUnassignedCallsByDpd();
+
+            if ($callsByDpd->isEmpty()) {
+                throw new Exception("No unassigned calls found for batch 1");
+            }
+
+            $totalCalls = $callsByDpd->flatten()->count();
+
+            Log::info('Preview data loaded', [
+                'total_calls' => $totalCalls,
+                'dpd_groups' => $callsByDpd->keys()->toArray(),
+                'agents_by_level' => array_map('count', $agentsByLevel)
+            ]);
+
+            // 4. Simulate assignment (WITHOUT actually updating database)
+            $previewData = $this->simulateAssignment(
+                $config,
+                $agentsByLevel,
+                $callsByDpd
+            );
+
+            Log::info('Team level assignment preview completed', [
+                'total_calls' => $previewData['total_assigned'],
+                'config_id' => $configId
+            ]);
+
+            return [
+                'success' => true,
+                'preview' => true,  // ✅ Flag to indicate this is preview
+                'config' => [
+                    'configId' => $config->configId,
+                    'targetDate' => $config->targetDate->format('Y-m-d'),
+                    'batchId' => $config->batchId,
+                    'percentages' => [
+                        'teamLeader' => (float) $config->teamLeaderPercentage,
+                        'senior' => (float) $config->seniorPercentage,
+                        'midLevel' => (float) $config->midLevelPercentage,
+                        'junior' => (float) $config->juniorPercentage,
+                    ],
+                ],
+                'total_assigned' => $previewData['total_assigned'],
+                'assignments_by_level' => $previewData['assignments_by_level'],
+                'assignments_by_user' => $previewData['assignments_by_user'],
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Team level assignment preview failed', [
+                'target_date' => $targetDate,
+                'config_id' => $configId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
 }

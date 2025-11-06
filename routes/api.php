@@ -297,7 +297,10 @@ Route::prefix('cc/team-level-config')->group(function () {
     // Approve configuration
     Route::post('/{configId}/approve', [TeamLevelConfigController::class, 'approveConfig']);
 
-    // NEW: Assign calls based on team level percentage
+    // NEW: Preview assignment (BEFORE actually assigning)
+    Route::post('/preview-assignment', [TeamLevelConfigController::class, 'previewAssignment']);
+
+    // Assign calls based on team level percentage
     Route::post('/assign-calls', [TeamLevelConfigController::class, 'assignCalls']);
 });
 

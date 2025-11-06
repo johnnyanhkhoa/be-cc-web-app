@@ -43,6 +43,7 @@ class TblCcTeamLevelConfig extends Model
         'totalCalls',  // ← THÊM
         'batchId',     // ← THÊM
         'isAssigned',
+        'assignmentsByUser',
     ];
 
     /**
@@ -66,6 +67,7 @@ class TblCcTeamLevelConfig extends Model
         'updatedAt' => 'datetime',
         'approvedAt' => 'datetime',
         'isAssigned' => 'boolean',
+        'assignmentsByUser' => 'array',
     ];
 
     /**
