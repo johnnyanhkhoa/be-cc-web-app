@@ -6,6 +6,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\CollectionLogController;
 use App\Http\Controllers\API\ContactPhoneController;
 use App\Http\Controllers\API\DutyRosterController;
+use App\Http\Controllers\API\MonitoringController;
 use App\Http\Controllers\API\PenaltyFeeController;
 use App\Http\Controllers\API\PMTGuidelineController;
 use App\Http\Controllers\API\TblCcBatchController;
@@ -317,6 +318,12 @@ Route::prefix('reschedule')->group(function () {
 
     // Create signature link
     Route::post('/{phoneCollectionId}/signature-link', [App\Http\Controllers\API\RescheduleController::class, 'createSignatureLink']);
+});
+
+// Monitoring Routes
+Route::prefix('monitoring')->group(function () {
+    Route::get('cco/{authUserId}', [MonitoringController::class, 'monitorSingleCCO']);
+    Route::get('ccos', [MonitoringController::class, 'monitorAllCCOs']);
 });
 
 // // Protected Routes (TODO: Add JWT middleware)
