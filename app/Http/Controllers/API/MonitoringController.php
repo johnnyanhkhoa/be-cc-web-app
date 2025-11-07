@@ -49,17 +49,22 @@ class MonitoringController extends Controller
                 )
                 ->get();
 
-            // Group by batch
+            // Get all active batches
+            $allBatches = TblCcBatch::where('batchActive', true)->get();
+
+            // Group assignments by batch
             $assignmentsByBatch = $assignments->groupBy('batchId');
 
-            // Calculate batch details
+            // Calculate batch details for ALL batches
             $batchDetails = [];
             $totalAssigned = 0;
             $totalPending = 0;
             $totalCompleted = 0;
 
-            foreach ($assignmentsByBatch as $batchId => $batchAssignments) {
-                $batch = TblCcBatch::find($batchId);
+            foreach ($allBatches as $batch) {
+                $batchId = $batch->batchId;
+                $batchAssignments = $assignmentsByBatch->get($batchId, collect([]));
+
                 $assigned = $batchAssignments->count();
                 $pending = $batchAssignments->where('status', 'pending')->count();
                 $completed = $batchAssignments->where('status', 'completed')->count();
@@ -70,7 +75,7 @@ class MonitoringController extends Controller
 
                 $batchDetails[] = [
                     'batchId' => $batchId,
-                    'batchCode' => $batch ? $batch->code : null,
+                    'batchCode' => $batch->code,
                     'assigned' => $assigned,
                     'pending' => $pending,
                     'completed' => $completed,
@@ -158,6 +163,9 @@ class MonitoringController extends Controller
             $grandTotalPending = 0;
             $grandTotalCompleted = 0;
 
+            // Get all active batches
+            $allBatches = TblCcBatch::where('batchActive', true)->get();
+
             foreach ($assignmentsByCCO as $authUserId => $ccoAssignments) {
                 $user = User::where('authUserId', $authUserId)->first();
                 if (!$user) continue;
@@ -170,8 +178,11 @@ class MonitoringController extends Controller
                 $totalPending = 0;
                 $totalCompleted = 0;
 
-                foreach ($assignmentsByBatch as $batchId => $batchAssignments) {
-                    $batch = TblCcBatch::find($batchId);
+                // Loop through ALL batches, not just batches with assignments
+                foreach ($allBatches as $batch) {
+                    $batchId = $batch->batchId;
+                    $batchAssignments = $assignmentsByBatch->get($batchId, collect([]));
+
                     $assigned = $batchAssignments->count();
                     $pending = $batchAssignments->where('status', 'pending')->count();
                     $completed = $batchAssignments->where('status', 'completed')->count();
@@ -182,7 +193,7 @@ class MonitoringController extends Controller
 
                     $batchDetails[] = [
                         'batchId' => $batchId,
-                        'batchCode' => $batch ? $batch->code : null,
+                        'batchCode' => $batch->code,
                         'assigned' => $assigned,
                         'pending' => $pending,
                         'completed' => $completed,
