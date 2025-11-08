@@ -107,6 +107,56 @@ class DutyRosterController extends Controller
 
             DB::beginTransaction();
 
+            // ✅ NEW: Check if duty roster is already assigned
+            $batchId = $validated['batchId'];
+            $startDate = Carbon::parse($validated['start_date']);
+            $endDate = Carbon::parse($validated['end_date']);
+
+            // Check each date in range
+            $current = $startDate->copy();
+            while ($current <= $endDate) {
+                $dateStr = $current->toDateString();
+
+                if ($batchId == 1) {
+                    // For batch 1: Check if approved config or assigned config exists
+                    $hasApprovedConfig = \App\Models\TblCcTeamLevelConfig::approved()
+                        ->active()
+                        ->forDate($dateStr)
+                        ->exists();
+
+                    $hasAssignedConfig = \App\Models\TblCcTeamLevelConfig::where('targetDate', $dateStr)
+                        ->where('batchId', 1)
+                        ->where('isAssigned', true)
+                        ->exists();
+
+                    if ($hasApprovedConfig || $hasAssignedConfig) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Cannot modify duty roster for batch 1 on {$dateStr}",
+                            'error' => 'Team level config has been approved or calls have been assigned. Duty roster is locked.'
+                        ], 403);
+                    }
+                } else {
+                    // For other batches: Check if any duty roster is already assigned
+                    $hasAssignedDutyRoster = DutyRoster::where('work_date', $dateStr)
+                        ->where('batchId', $batchId)
+                        ->where('isAssigned', true)
+                        ->exists();
+
+                    if ($hasAssignedDutyRoster) {
+                        DB::rollBack();
+                        return response()->json([
+                            'success' => false,
+                            'message' => "Cannot modify duty roster for batch {$batchId} on {$dateStr}",
+                            'error' => 'Calls have been assigned. Duty roster is locked.'
+                        ], 403);
+                    }
+                }
+
+                $current->addDay();
+            }
+
             $startDate = Carbon::parse($validated['start_date']);
             $endDate = Carbon::parse($validated['end_date']);
             $agentAuthUserIds = $validated['agent_auth_user_ids'];
@@ -151,11 +201,20 @@ class DutyRosterController extends Controller
                         if ($existingDuty->trashed()) {
                             // Restore soft deleted record
                             $existingDuty->restore();
-                            $existingDuty->update([
+
+                            // ✅ IMPORTANT: Only reset isAssigned if not already assigned
+                            $updateData = [
                                 'is_working' => true,
                                 'created_by' => $createdBy,
-                                'batchId' => $batchId,  // ← THÊM DÒNG NÀY
-                            ]);
+                                'batchId' => $batchId,
+                            ];
+
+                            // Only set isAssigned = false if it's not already true
+                            if (!$existingDuty->isAssigned) {
+                                $updateData['isAssigned'] = false;
+                            }
+
+                            $existingDuty->update($updateData);
 
                             $created[] = [
                                 'date' => $dateStr,
@@ -164,11 +223,19 @@ class DutyRosterController extends Controller
                             ];
                         } else {
                             // Update existing active record
-                            $existingDuty->update([
+                            // ✅ IMPORTANT: Only reset isAssigned if not already assigned
+                            $updateData = [
                                 'is_working' => true,
                                 'created_by' => $createdBy,
-                                'batchId' => $batchId,  // ← THÊM DÒNG NÀY
-                            ]);
+                                'batchId' => $batchId,
+                            ];
+
+                            // Only set isAssigned = false if it's not already true
+                            if (!$existingDuty->isAssigned) {
+                                $updateData['isAssigned'] = false;
+                            }
+
+                            $existingDuty->update($updateData);
 
                             $created[] = [
                                 'date' => $dateStr,
@@ -177,13 +244,14 @@ class DutyRosterController extends Controller
                             ];
                         }
                     } else {
-                        // Create new record
+                        // Create new duty roster
                         DutyRoster::create([
                             'work_date' => $dateStr,
                             'user_id' => $localUserId,
                             'is_working' => true,
                             'created_by' => $createdBy,
-                            'batchId' => $batchId,  // ← THÊM DÒNG NÀY
+                            'batchId' => $batchId,
+                            'isAssigned' => false,  // ← THÊM DÒNG NÀY
                         ]);
 
                         $created[] = [
@@ -289,7 +357,9 @@ class DutyRosterController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Cannot delete duty roster assignment',
-                    'error' => 'Deletion is only allowed before 7:00 AM on the same day or for future dates'
+                    'error' => $dutyRoster->batchId == 1
+                        ? 'Team level config has been approved or calls have been assigned. Duty roster is locked.'
+                        : 'Calls have been assigned. Duty roster is locked.'
                 ], 403);
             }
 

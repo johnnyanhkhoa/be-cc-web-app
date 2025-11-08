@@ -49,17 +49,8 @@ class TeamLevelConfigController extends Controller
                 'target_date' => $targetDate
             ]);
 
-            // ✅ THAY ĐÔI LOGIC: Priority approved > suggested
-            // First try to get approved config
-            $config = TblCcTeamLevelConfig::approved()
-                ->active()
-                ->forDate($targetDate)
-                ->first();
-
-            // If no approved config, get or create suggested config
-            if (!$config) {
-                $config = $this->configService->getSuggestedConfig($targetDate, $creatorUser->id);
-            }
+            // ✅ NEW LOGIC: Regenerate if duty roster changed (batch 1 only)
+            $config = $this->configService->regenerateSuggestedConfigIfNeeded($targetDate, $creatorUser->id);
 
             if (!$config) {
                 return response()->json([
@@ -177,7 +168,12 @@ class TeamLevelConfigController extends Controller
 
             DB::commit();
 
-            Log::info('Config saved', [
+            // ✅ NEW: Lock duty roster for batch 1 when config is saved
+            \App\Models\DutyRoster::where('work_date', $request->targetDate)
+                ->where('batchId', 1)
+                ->update(['isAssigned' => true]);
+
+            Log::info('Config saved and duty roster locked', [
                 'config_id' => $config->configId,
                 'target_date' => $request->targetDate
             ]);
@@ -254,9 +250,14 @@ class TeamLevelConfigController extends Controller
 
             DB::commit();
 
-            Log::info('Config approved', [
-                'config_id' => $configId,
-                'approved_by' => $approverUser->id
+            // ✅ NEW: Lock duty roster for batch 1 when config is approved
+            \App\Models\DutyRoster::where('work_date', $config->targetDate)
+                ->where('batchId', 1)
+                ->update(['isAssigned' => true]);
+
+            Log::info('Config approved and duty roster locked', [
+                'config_id' => $config->configId,
+                'target_date' => $config->targetDate->format('Y-m-d')
             ]);
 
             return response()->json([
@@ -532,6 +533,11 @@ class TeamLevelConfigController extends Controller
 
             // ✅ THÊM: Update isAssigned = true
             $config->update(['isAssigned' => true]);
+
+            // ✅ NEW: Also lock duty roster for batch 1
+            \App\Models\DutyRoster::where('work_date', $targetDate)
+                ->where('batchId', 1)
+                ->update(['isAssigned' => true]);
 
             return response()->json([
                 'success' => true,

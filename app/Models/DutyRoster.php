@@ -21,6 +21,7 @@ class DutyRoster extends Model
         'is_working',
         'created_by',
         'batchId',  // ← THÊM DÒNG NÀY
+        'isAssigned',
     ];
 
     /**
@@ -30,6 +31,7 @@ class DutyRoster extends Model
         'work_date' => 'date',
         'is_working' => 'boolean',
         'batchId' => 'integer',  // ← THÊM DÒNG NÀY
+        'isAssigned' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -89,17 +91,22 @@ class DutyRoster extends Model
      */
     public function canBeDeleted(): bool
     {
-        $now = Carbon::now();
-        $workDate = Carbon::parse($this->work_date);
-
-        // Cannot delete past dates
-        if ($workDate->isBefore($now->toDateString())) {
+        // ✅ NEW LOGIC: Check isAssigned instead of time-based lock
+        // If already assigned, cannot delete regardless of time
+        if ($this->isAssigned) {
             return false;
         }
 
-        // Cannot delete today after 7AM
-        if ($workDate->isSameDay($now) && $now->hour >= 7) {
-            return false;
+        // ✅ For batch 1: Additional check for approved config
+        if ($this->batchId == 1) {
+            $hasApprovedConfig = \App\Models\TblCcTeamLevelConfig::approved()
+                ->active()
+                ->forDate($this->work_date)
+                ->exists();
+
+            if ($hasApprovedConfig) {
+                return false;
+            }
         }
 
         return true;

@@ -263,4 +263,53 @@ class TeamLevelConfigService
             ->orderBy('targetDate', 'desc')
             ->first();
     }
+
+    /**
+     * Regenerate suggested config if duty roster changed and not locked
+     * Only for batch 1, and only if config is still suggested and isAssigned = false
+     *
+     * @param string $targetDate
+     * @param int $createdBy
+     * @return TblCcTeamLevelConfig|null
+     */
+    public function regenerateSuggestedConfigIfNeeded(string $targetDate, int $createdBy): ?TblCcTeamLevelConfig
+    {
+        // Check if there's an approved config - if yes, don't regenerate
+        $approvedConfig = TblCcTeamLevelConfig::approved()
+            ->active()
+            ->where('batchId', 1)
+            ->forDate($targetDate)
+            ->first();
+
+        if ($approvedConfig) {
+            Log::info('Approved config exists, not regenerating', [
+                'target_date' => $targetDate
+            ]);
+            return $approvedConfig;
+        }
+
+        // Check existing suggested config
+        $existingConfig = TblCcTeamLevelConfig::suggested()
+            ->active()
+            ->where('batchId', 1)
+            ->forDate($targetDate)
+            ->first();
+
+        // If config already assigned, don't regenerate
+        if ($existingConfig && $existingConfig->isAssigned) {
+            Log::info('Suggested config already assigned, not regenerating', [
+                'target_date' => $targetDate,
+                'config_id' => $existingConfig->configId
+            ]);
+            return $existingConfig;
+        }
+
+        // Deactivate old suggested config
+        if ($existingConfig) {
+            $existingConfig->update(['isActive' => false]);
+        }
+
+        // Generate new suggested config based on current duty roster
+        return $this->generateSuggestedConfig($targetDate, $createdBy);
+    }
 }
