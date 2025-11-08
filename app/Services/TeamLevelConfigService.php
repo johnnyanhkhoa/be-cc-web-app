@@ -304,12 +304,82 @@ class TeamLevelConfigService
             return $existingConfig;
         }
 
-        // Deactivate old suggested config
+        // ✅ NEW: Check if duty roster changed
         if ($existingConfig) {
+            $dutyRosterChanged = $this->hasDutyRosterChanged($targetDate, $existingConfig);
+
+            if (!$dutyRosterChanged) {
+                Log::info('Duty roster unchanged, returning existing config', [
+                    'target_date' => $targetDate,
+                    'config_id' => $existingConfig->configId
+                ]);
+                return $existingConfig;
+            }
+
+            Log::info('Duty roster changed, regenerating config', [
+                'target_date' => $targetDate,
+                'old_config_id' => $existingConfig->configId
+            ]);
+
+            // Deactivate old config because duty roster changed
             $existingConfig->update(['isActive' => false]);
         }
 
         // Generate new suggested config based on current duty roster
         return $this->generateSuggestedConfig($targetDate, $createdBy);
+    }
+
+    /**
+     * Check if duty roster has changed compared to existing config
+     *
+     * @param string $targetDate
+     * @param TblCcTeamLevelConfig $existingConfig
+     * @return bool
+     */
+    private function hasDutyRosterChanged(string $targetDate, TblCcTeamLevelConfig $existingConfig): bool
+    {
+        // Get current duty roster
+        $dutyRosters = DutyRoster::with('user')
+            ->where('work_date', $targetDate)
+            ->where('batchId', 1)
+            ->where('is_working', true)
+            ->get();
+
+        // Count current agents by level
+        $currentCounts = [
+            'team-leader' => 0,
+            'senior' => 0,
+            'mid-level' => 0,
+            'junior' => 0,
+        ];
+
+        foreach ($dutyRosters as $roster) {
+            $level = \App\Models\TblCcUserLevel::getActiveLevel($roster->user->id, 1);
+            if ($level && isset($currentCounts[$level])) {
+                $currentCounts[$level]++;
+            }
+        }
+
+        // Compare with existing config counts
+        $configCounts = [
+            'team-leader' => $existingConfig->teamLeaderCount,
+            'senior' => $existingConfig->seniorCount,
+            'mid-level' => $existingConfig->midLevelCount,
+            'junior' => $existingConfig->juniorCount,
+        ];
+
+        // Check if counts changed
+        foreach ($currentCounts as $level => $count) {
+            if ($count !== $configCounts[$level]) {
+                Log::info('Duty roster count changed', [
+                    'level' => $level,
+                    'old_count' => $configCounts[$level],
+                    'new_count' => $count
+                ]);
+                return true;
+            }
+        }
+
+        return false;
     }
 }
