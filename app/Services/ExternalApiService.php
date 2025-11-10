@@ -8,8 +8,8 @@ use Exception;
 
 class ExternalApiService
 {
-    // private const BASE_URL = 'https://maximus.vnapp.xyz/api/v1/cc/phone-collection';
-    private const BASE_URL = 'https://maximus-staging.vnapp.xyz/api/v1/cc/phone-collection';
+    private const BASE_URL = 'https://maximus.vnapp.xyz/api/v1/cc/phone-collection';
+    private const BASE_URL_STAGING = 'https://maximus-staging.vnapp.xyz/api/v1/cc/phone-collection';
     private const API_KEY = 't03JN3y8L12gzVbuLuorjwBAHgVAkkY6QOvJkP6m';
 
     /**
@@ -18,7 +18,7 @@ class ExternalApiService
     public function fetchContractDetails(int $contractId): array
     {
         try {
-            $url = self::BASE_URL . '/contracts/' . $contractId;
+            $url = self::BASE_URL_STAGING . '/contracts/' . $contractId;
 
             Log::info('Fetching contract details from external API', [
                 'url' => $url,
