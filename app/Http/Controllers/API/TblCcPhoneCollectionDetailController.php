@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Exception;
+use App\Models\VwCcPhoneCollectionBasic;
+use App\Models\VwCcPhoneCollectionDetailRemarks;
 
 class TblCcPhoneCollectionDetailController extends Controller
 {
@@ -540,7 +542,6 @@ class TblCcPhoneCollectionDetailController extends Controller
     public function getRemarksByContract(Request $request, int $contractId): JsonResponse
     {
         try {
-            // Validate contractId
             if ($contractId <= 0) {
                 return response()->json([
                     'success' => false,
@@ -549,38 +550,34 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ], 400);
             }
 
-            Log::info('Fetching remarks for contract', [
+            Log::info('Fetching remarks for contract (all years)', [
                 'contract_id' => $contractId
             ]);
 
-            // Get all phone collections for this contract
-            $phoneCollections = TblCcPhoneCollection::where('contractId', $contractId)
-                ->select('phoneCollectionId', 'contractId', 'customerFullName', 'status', 'totalAttempts')
-                ->get();
+            // Get phone collections from view
+            $phoneCollections = VwCcPhoneCollectionBasic::where('contractId', $contractId)->get();
 
             if ($phoneCollections->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No phone collections found for this contract',
-                    'error' => 'The specified contract has no phone collection records'
                 ], 404);
             }
 
             $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
 
-            // Get all call details with remarks for these phone collections
-            $callDetails = TblCcPhoneCollectionDetail::with(['standardRemark', 'creator', 'phoneCollection', 'uploadImages'])
-                ->whereIn('phoneCollectionId', $phoneCollectionIds)
-                ->where(function($query) {
-                    // Only get records that have remarks
-                    $query->whereNotNull('remark')
-                        ->orWhereNotNull('standardRemarkContent')
-                        ->orWhereNotNull('standardRemarkId');
-                })
-                ->orderBy('createdAt', 'desc')
-                ->get();
+            // Get remarks from view (already filtered by WHERE in view)
+            $callDetails = VwCcPhoneCollectionDetailRemarks::with([
+                'standardRemark',
+                'creator',
+                'phoneCollection',
+                'reason',
+                'uploadImages'
+            ])
+            ->whereIn('phoneCollectionId', $phoneCollectionIds)
+            ->orderBy('createdAt', 'desc')
+            ->get();
 
-            // Transform data for response
             $transformedRemarks = $callDetails->map(function ($detail) {
                 return [
                     'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
@@ -595,6 +592,9 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'remarkContent' => $detail->standardRemark->remarkContent,
                         'contactType' => $detail->standardRemark->contactType,
                     ] : null,
+                    'reasonId' => $detail->reasonId,
+                    'reasonName' => $detail->reason?->reasonName,
+                    'reasonRemark' => $detail->reason?->reasonRemark,
                     'contactType' => $detail->contactType,
                     'callStatus' => $detail->callStatus,
                     'contactPhoneNumer' => $detail->contactPhoneNumer,
@@ -605,7 +605,6 @@ class TblCcPhoneCollectionDetailController extends Controller
                         'username' => $detail->creator->username,
                         'userFullName' => $detail->creator->userFullName,
                     ] : null,
-                    // ✅ THÊM DÒNG NÀY
                     'uploadedImages' => $detail->uploadImages->map(function ($image) {
                         return [
                             'uploadImageId' => $image->uploadImageId,
@@ -619,14 +618,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ];
             });
 
-            // Group remarks by phoneCollectionId
             $remarksByPhoneCollection = $transformedRemarks->groupBy('phoneCollectionId');
-
-            Log::info('Contract remarks fetched successfully', [
-                'contract_id' => $contractId,
-                'phone_collections_count' => $phoneCollections->count(),
-                'total_remarks' => $callDetails->count()
-            ]);
 
             return response()->json([
                 'success' => true,
@@ -643,7 +635,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                             'remarkCount' => $remarksByPhoneCollection->get($pc->phoneCollectionId, collect())->count(),
                         ];
                     }),
-                    'allRemarks' => $transformedRemarks->values(), // Flat list of all remarks
+                    'allRemarks' => $transformedRemarks->values(),
                     'summary' => [
                         'totalPhoneCollections' => $phoneCollections->count(),
                         'totalRemarks' => $callDetails->count(),
@@ -659,7 +651,6 @@ class TblCcPhoneCollectionDetailController extends Controller
             Log::error('Failed to fetch contract remarks', [
                 'contract_id' => $contractId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
