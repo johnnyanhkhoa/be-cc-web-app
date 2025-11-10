@@ -229,6 +229,14 @@ class TeamLevelAssignmentService
                 'allocations' => $levelDpdAllocations
             ]);
 
+            // ✅ NEW: Track user index for each level to ensure fair distribution
+            $userIndexByLevel = [
+                'team-leader' => 0,
+                'senior' => 0,
+                'mid-level' => 0,
+                'junior' => 0,
+            ];
+
             // Step 3: Assign calls based on calculated allocations
             foreach ($callsByDpd as $dpd => $dpdCalls) {
                 Log::info('Processing DPD group', [
@@ -253,8 +261,9 @@ class TeamLevelAssignmentService
                     // Take calls from this DPD group
                     $callsForLevel = $dpdCalls->splice(0, $count);
 
-                    // Round-robin assign to users within level
-                    $userIndex = 0;
+                    // ✅ FIX: Use persistent userIndex across DPD groups
+                    $userIndex = $userIndexByLevel[$level];
+
                     foreach ($callsForLevel as $call) {
                         $user = $users[$userIndex];
 
@@ -283,6 +292,9 @@ class TeamLevelAssignmentService
                         // Decrease quota
                         $remainingQuota[$level]--;
                     }
+
+                    // ✅ IMPORTANT: Save the userIndex for next DPD group
+                    $userIndexByLevel[$level] = $userIndex;
 
                     Log::info('Assigned calls for level', [
                         'level' => $level,
@@ -352,6 +364,14 @@ class TeamLevelAssignmentService
         // Track remaining quota for each level
         $remainingQuota = $totalAllocations;
 
+        // ✅ NEW: Track user index for each level to ensure fair distribution
+        $userIndexByLevel = [
+            'team-leader' => 0,
+            'senior' => 0,
+            'mid-level' => 0,
+            'junior' => 0,
+        ];
+
         // Calculate allocations for each DPD group
         $levelDpdAllocations = [];
 
@@ -373,8 +393,14 @@ class TeamLevelAssignmentService
 
         $levelDpdAllocations = $this->adjustAllocationsToQuota($levelDpdAllocations, $remainingQuota, $callsByDpd);
 
-        // Simulate assignments (WITHOUT saving to database)
+        // ✅ Create a copy of callsByDpd to avoid modifying original
+        $callsByDpdCopy = collect();
         foreach ($callsByDpd as $dpd => $dpdCalls) {
+            $callsByDpdCopy[$dpd] = collect($dpdCalls->all());
+        }
+
+        // Simulate assignments (WITHOUT saving to database)
+        foreach ($callsByDpdCopy as $dpd => $dpdCalls) {
             foreach (['team-leader', 'senior', 'mid-level', 'junior'] as $level) {
                 $count = $levelDpdAllocations[$level][$dpd] ?? 0;
 
@@ -388,15 +414,15 @@ class TeamLevelAssignmentService
                     continue;
                 }
 
-                // Take calls from this DPD group
-                $callsForLevel = $dpdCalls->take($count);
+                // ✅ FIX: Take and remove calls properly
+                $callsForLevel = $dpdCalls->splice(0, $count);
 
-                // Round-robin assign to users within level
-                $userIndex = 0;
+                // ✅ FIX: Use persistent userIndex across DPD groups
+                $userIndex = $userIndexByLevel[$level];
+
                 foreach ($callsForLevel as $call) {
                     $user = $users[$userIndex];
 
-                    // ✅ Just simulate - DON'T actually update
                     $assignments[] = [
                         'phoneCollectionId' => $call->phoneCollectionId,
                         'contractNo' => $call->contractNo,
@@ -411,14 +437,14 @@ class TeamLevelAssignmentService
                     $remainingQuota[$level]--;
                 }
 
-                // Remove assigned calls from collection for next iteration
-                $dpdCalls->splice(0, $count);
+                // ✅ IMPORTANT: Save the userIndex for next DPD group
+                $userIndexByLevel[$level] = $userIndex;
             }
         }
 
         // Handle leftover calls
         $leftoverCalls = collect();
-        foreach ($callsByDpd as $dpd => $dpdCalls) {
+        foreach ($callsByDpdCopy as $dpd => $dpdCalls) {
             if ($dpdCalls->isNotEmpty()) {
                 $leftoverCalls = $leftoverCalls->merge($dpdCalls);
             }
@@ -432,11 +458,14 @@ class TeamLevelAssignmentService
                 foreach ($leftoverCalls as $call) {
                     $user = $allUsers[$userIndex];
 
+                    // ✅ FIX: Get level from TblCcUserLevel
+                    $userLevel = \App\Models\TblCcUserLevel::getActiveLevel($user->id, 1);
+
                     $assignments[] = [
                         'phoneCollectionId' => $call->phoneCollectionId,
                         'contractNo' => $call->contractNo,
                         'dpd' => $call->daysOverdueGross,
-                        'level' => $user->level ?? 'unknown',
+                        'level' => $userLevel ?? 'unknown',
                         'user_id' => $user->id,
                         'user_auth_user_id' => $user->authUserId,
                         'user_name' => $user->userFullName,
