@@ -209,8 +209,8 @@ class CollectionLogService
     protected function getLitigationJournals(int $contractId, string $fromDate, string $toDate): Collection
     {
         try {
-            // $url = "https://maximus.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
-            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
+            $url = "https://maximus.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
+            // $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/contracts/{$contractId}/litigation-journals/from/{$fromDate}/to/{$toDate}";
 
             Log::info('Calling Maximus API for litigation journals', [
                 'url' => $url,
