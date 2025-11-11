@@ -18,7 +18,7 @@ class ExternalApiService
     public function fetchContractDetails(int $contractId): array
     {
         try {
-            $url = self::BASE_URL_STAGING . '/contracts/' . $contractId;
+            $url = self::BASE_URL . '/contracts/' . $contractId;
 
             Log::info('Fetching contract details from external API', [
                 'url' => $url,
