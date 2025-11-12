@@ -40,6 +40,7 @@ class TblCcTeamLevelConfig extends Model
         'createdBy',
         'updatedBy',
         'approvedBy',
+        'approvedAt',
         'totalCalls',  // ← THÊM
         'batchId',     // ← THÊM
         'isAssigned',
