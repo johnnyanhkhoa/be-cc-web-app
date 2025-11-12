@@ -390,9 +390,9 @@ class TeamLevelConfigController extends Controller
                 'username' => $config->approver->username,
                 'userFullName' => $config->approver->userFullName,
             ] : null,
-            'createdAt' => $config->createdAt?->format('Y-m-d H:i:s'),
-            'updatedAt' => $config->updatedAt?->format('Y-m-d H:i:s'),
-            'approvedAt' => $config->approvedAt?->format('Y-m-d H:i:s'),
+            'createdAt' => $config->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'updatedAt' => $config->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'approvedAt' => $config->approvedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 
