@@ -53,13 +53,14 @@ class PhoneCollectionSyncService
     protected function syncPastDueContracts(): array
     {
         try {
-            // Get ALL active batches for past-due
+            // Get active batches for past-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('past-due')
-                ->get(); // Thay đổi từ first() thành get()
+                ->whereNotNull('intensity')
+                ->get();
 
             if ($batches->isEmpty()) {
-                throw new Exception('No active batches found for past-due segment');
+                throw new Exception('No active batches with intensity found for past-due segment');
             }
 
             $totalContracts = 0;
@@ -118,13 +119,14 @@ class PhoneCollectionSyncService
     protected function syncPreDueContracts(): array
     {
         try {
-            // Get ALL active batches for pre-due
+            // Get active batches for pre-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('pre-due')
-                ->get(); // Thay đổi từ first() thành get()
+                ->whereNotNull('intensity')
+                ->get();
 
             if ($batches->isEmpty()) {
-                throw new Exception('No active batches found for pre-due segment');
+                throw new Exception('No active batches with intensity found for pre-due segment');
             }
 
             $totalContracts = 0;
@@ -191,6 +193,10 @@ class PhoneCollectionSyncService
 
             $insertData = [];
             foreach ($contracts as $contract) {
+                // ✅ NEW LOGIC: Map batchId 5,6,7 to parent batch 8
+                $originalBatchId = $batchId;
+                $finalBatchId = in_array($batchId, [5, 6, 7]) ? 8 : $batchId;
+
                 $insertData[] = [
                     // Required fields from API
                     'contractId' => $contract['contractId'],
@@ -220,13 +226,14 @@ class PhoneCollectionSyncService
 
                     // Segment and batch info
                     'segmentType' => $segmentType,
-                    'batchId' => $batchId,
+                    'batchId' => $finalBatchId,        // ✅ 5,6,7 → 8; others stay same
+                    'subBatchId' => $originalBatchId,  // ✅ Keep original batchId
                     'riskType' => $contract['preDueRiskSegment'] ?? null,
 
                     // Default values
                     'status' => 'pending',
                     'totalAttempts' => 0,
-                    'createdBy' => 1, // TODO: Get from auth
+                    'createdBy' => 1,
                     'updatedBy' => 1,
                     'createdAt' => now(),
                     'updatedAt' => now(),

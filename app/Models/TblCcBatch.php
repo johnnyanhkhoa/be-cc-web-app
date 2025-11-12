@@ -42,6 +42,8 @@ class TblCcBatch extends Model
         'deletedReason',
         'segmentType',
         'scriptCollectionId',
+        'batchName',           // ← nếu chưa có
+        'parentBatchId',       // ← THÊM
     ];
 
     /**

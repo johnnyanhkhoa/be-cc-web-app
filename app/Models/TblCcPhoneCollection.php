@@ -67,6 +67,7 @@ class TblCcPhoneCollection extends Model
         'deletedBy',
         'deletedReason',
         'batchId',
+        'subBatchId',
         'riskType',
         'completedBy',
         'completedAt',

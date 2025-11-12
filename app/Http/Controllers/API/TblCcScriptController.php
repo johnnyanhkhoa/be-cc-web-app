@@ -188,7 +188,7 @@ class TblCcScriptController extends Controller
                 ], 404);
             }
 
-            $batchId = $phoneCollection->batchId;
+            $batchId = $phoneCollection->subBatchId;
             $daysPastDue = $phoneCollection->daysOverdueGross;
 
             Log::info('Found phone collection data', [

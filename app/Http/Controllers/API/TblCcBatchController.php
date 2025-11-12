@@ -23,7 +23,8 @@ class TblCcBatchController extends Controller
     {
         try {
             // Query batches
-            $query = TblCcBatch::query();
+            // Query batches (only parent batches where parentBatchId IS NULL)
+            $query = TblCcBatch::whereNull('parentBatchId');
 
             // Optional: Filter by batchActive if provided
             if ($request->has('batchActive')) {
@@ -242,6 +243,72 @@ class TblCcBatchController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update batch',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all batches with intensity NOT NULL
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getBatchesWithIntensity(Request $request): JsonResponse
+    {
+        try {
+            // Query batches where intensity is NOT NULL
+            $query = TblCcBatch::whereNotNull('intensity');
+
+            // Optional: Filter by batchActive if provided
+            if ($request->has('batchActive')) {
+                $query->where('batchActive', filter_var($request->batchActive, FILTER_VALIDATE_BOOLEAN));
+            }
+
+            // Optional: Filter by segmentType if provided
+            if ($request->has('segmentType') && !empty($request->segmentType)) {
+                $query->where('segmentType', $request->segmentType);
+            }
+
+            // Get results ordered by batchId
+            $batches = $query->orderBy('batchId', 'asc')->get();
+
+            // Transform data
+            $transformedData = $batches->map(function ($batch) {
+                return [
+                    'batchId' => $batch->batchId,
+                    'type' => $batch->type,
+                    'code' => $batch->code,
+                    'batchName' => $batch->batchName,
+                    'intensity' => $batch->intensity,
+                    'batchActive' => $batch->batchActive,
+                    'segmentType' => $batch->segmentType,
+                    'parentBatchId' => $batch->parentBatchId,
+                    'createdAt' => $batch->createdAt?->format('Y-m-d H:i:s'),
+                    'updatedAt' => $batch->updatedAt?->format('Y-m-d H:i:s'),
+                ];
+            });
+
+            Log::info('Batches with intensity retrieved successfully', [
+                'count' => $batches->count(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Batches with intensity retrieved successfully',
+                'data' => $transformedData,
+                'total' => $batches->count(),
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to retrieve batches with intensity', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve batches with intensity',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
             ], 500);
         }

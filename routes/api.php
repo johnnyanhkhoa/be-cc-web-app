@@ -277,6 +277,9 @@ Route::prefix('cc-batches')->group(function () {
     // Get all batches
     Route::get('/', [App\Http\Controllers\API\TblCcBatchController::class, 'index']);
 
+    // Get batches with intensity NOT NULL
+    Route::get('/with-intensity', [App\Http\Controllers\API\TblCcBatchController::class, 'getBatchesWithIntensity']);
+
     // Get batch by ID
     Route::get('/{batchId}', [App\Http\Controllers\API\TblCcBatchController::class, 'show']);
 
