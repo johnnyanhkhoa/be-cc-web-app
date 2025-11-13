@@ -190,6 +190,7 @@ class TblCcPhoneCollectionController extends Controller
     {
         try {
             // Add with('batch') to eager load relationship
+            // Also prepare to load assignedBy user info
             $query = TblCcPhoneCollection::with('batch');
 
             // Filter by status if provided
@@ -279,13 +280,42 @@ class TblCcPhoneCollectionController extends Controller
             // Get all results without pagination
             $phoneCollections = $query->get();
 
-            // Transform data to include batchCode
-            $transformedData = $phoneCollections->map(function ($pc) {
+            // Get unique assignedBy values (excluding 1 and null) to batch query users
+            $assignedByIds = $phoneCollections
+                ->pluck('assignedBy')
+                ->filter(function ($assignedBy) {
+                    return $assignedBy !== null && $assignedBy !== 1;
+                })
+                ->unique()
+                ->values()
+                ->toArray();
+
+            // Batch load users for assignedBy
+            $assignedByUsers = [];
+            if (!empty($assignedByIds)) {
+                $assignedByUsers = User::whereIn('authUserId', $assignedByIds)
+                    ->get()
+                    ->keyBy('authUserId');
+            }
+
+            // Transform data to include batchCode and assignedByName
+            $transformedData = $phoneCollections->map(function ($pc) use ($assignedByUsers) {
+                // Determine assignedByName
+                $assignedByName = null;
+                if ($pc->assignedBy !== null) {
+                    if ($pc->assignedBy === 1) {
+                        $assignedByName = 'System';
+                    } elseif (isset($assignedByUsers[$pc->assignedBy])) {
+                        $assignedByName = $assignedByUsers[$pc->assignedBy]->userFullName;
+                    }
+                }
+
                 return [
                     'phoneCollectionId' => $pc->phoneCollectionId,
                     'status' => $pc->status,
                     'assignedTo' => $pc->assignedTo,
                     'assignedBy' => $pc->assignedBy,
+                    'assignedByName' => $assignedByName,  // ← NEW FIELD
                     'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'totalAttempts' => $pc->totalAttempts,
                     'lastAttemptAt' => $pc->lastAttemptAt?->utc()->format('Y-m-d\TH:i:s\Z'),

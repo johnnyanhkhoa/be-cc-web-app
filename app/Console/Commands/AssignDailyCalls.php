@@ -43,7 +43,7 @@ class AssignDailyCalls extends Command
             $this->info('='.str_repeat('=', 60));
 
             // Get assigner user authUserId (first user)
-            $assignedBy = User::first()?->authUserId;
+            $assignedBy = 1;
 
             if (!$assignedBy) {
                 $this->error('No users found in system. Please create at least one user first.');
