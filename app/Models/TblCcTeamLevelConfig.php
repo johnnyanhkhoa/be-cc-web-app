@@ -45,6 +45,8 @@ class TblCcTeamLevelConfig extends Model
         'batchId',     // ← THÊM
         'isAssigned',
         'assignmentsByUser',
+        'assignedBy',   // ← THÊM
+        'assignedAt',   // ← THÊM
     ];
 
     /**
@@ -67,6 +69,7 @@ class TblCcTeamLevelConfig extends Model
         'createdAt' => 'datetime',
         'updatedAt' => 'datetime',
         'approvedAt' => 'datetime',
+        'assignedAt' => 'datetime',
         'isAssigned' => 'boolean',
         'assignmentsByUser' => 'array',
     ];
@@ -157,5 +160,13 @@ class TblCcTeamLevelConfig extends Model
     public function scopeApproved($query)
     {
         return $query->where('configType', self::TYPE_APPROVED);
+    }
+
+    /**
+     * Relationship: Get assigner (user who assigned calls)
+     */
+    public function assigner()
+    {
+        return $this->belongsTo(User::class, 'assignedBy', 'id');
     }
 }

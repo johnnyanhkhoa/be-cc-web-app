@@ -300,9 +300,10 @@ class TeamLevelConfigController extends Controller
                 'toDate' => 'nullable|date|after_or_equal:fromDate',
                 'configType' => 'nullable|string|in:suggested,approved',
                 'limit' => 'nullable|integer|min:1|max:100',
+                'batchId' => 'nullable|integer',  // ← THÊM validation
             ]);
 
-            $query = TblCcTeamLevelConfig::with(['creator', 'updater', 'approver', 'basedOnConfig'])
+            $query = TblCcTeamLevelConfig::with(['creator', 'updater', 'approver', 'assigner', 'basedOnConfig'])  // ← THÊM 'assigner'
                 ->orderBy('targetDate', 'desc');
 
             // Apply filters
@@ -316,6 +317,10 @@ class TeamLevelConfigController extends Controller
 
             if ($request->configType) {
                 $query->where('configType', $request->configType);
+            }
+
+            if ($request->batchId) {  // ← THÊM filter by batchId
+                $query->where('batchId', $request->batchId);
             }
 
             $limit = $request->input('limit', 30);
@@ -374,7 +379,7 @@ class TeamLevelConfigController extends Controller
                 'junior' => (float) $config->juniorPercentage,
             ],
             'agentsByLevel' => $usersByLevel,
-            'assignmentsByUser' => $config->assignmentsByUser,  // ✅ THÊM
+            'assignmentsByUser' => $config->assignmentsByUser,
             'configType' => $config->configType,
             'isActive' => $config->isActive,
             'isAssigned' => $config->isAssigned,
@@ -392,9 +397,16 @@ class TeamLevelConfigController extends Controller
                 'username' => $config->approver->username,
                 'userFullName' => $config->approver->userFullName,
             ] : null,
+            'assignedBy' => $config->assigner ? [           // ← THÊM: assignedBy info
+                'id' => $config->assigner->id,
+                'authUserId' => $config->assigner->authUserId,
+                'username' => $config->assigner->username,
+                'userFullName' => $config->assigner->userFullName,
+            ] : null,
             'createdAt' => $config->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
             'updatedAt' => $config->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
             'approvedAt' => $config->approvedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'assignedAt' => $config->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),  // ← THÊM
         ];
     }
 
@@ -534,7 +546,11 @@ class TeamLevelConfigController extends Controller
             );
 
             // ✅ THÊM: Update isAssigned = true
-            $config->update(['isAssigned' => true]);
+            $config->update([
+                'isAssigned' => true,
+                'assignedBy' => $creatorUser->id,  // ← THÊM: Lưu local user id
+                'assignedAt' => now(),              // ← THÊM: Thời gian assign
+            ]);
 
             // ✅ NEW: Also lock duty roster for batch 1
             \App\Models\DutyRoster::where('work_date', $targetDate)
