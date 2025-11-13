@@ -272,7 +272,7 @@ class TeamLevelAssignmentService
                             'assignedTo' => $user->authUserId,
                             'assignedBy' => $assignedByAuthUserId,
                             'assignedAt' => now(),
-                            'status' => 'assigned',
+                            'status' => 'pending',
                             'updatedBy' => $assignedByAuthUserId,
                         ]);
 
@@ -682,7 +682,7 @@ class TeamLevelAssignmentService
                 'assignedTo' => $user->authUserId,
                 'assignedBy' => $assignedByAuthUserId,
                 'assignedAt' => now(),
-                'status' => 'assigned',
+                'status' => 'pending',
                 'updatedBy' => $assignedByAuthUserId,
             ]);
 
