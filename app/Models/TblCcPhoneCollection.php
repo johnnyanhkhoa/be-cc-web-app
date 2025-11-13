@@ -161,4 +161,12 @@ class TblCcPhoneCollection extends Model
             [$assignedAt]
         );
     }
+
+    /**
+     * Relationship: Get sub-batch information
+     */
+    public function subBatch()
+    {
+        return $this->belongsTo(TblCcBatch::class, 'subBatchId', 'batchId');
+    }
 }

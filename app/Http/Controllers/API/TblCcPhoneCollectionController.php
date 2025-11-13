@@ -191,7 +191,7 @@ class TblCcPhoneCollectionController extends Controller
         try {
             // Add with('batch') to eager load relationship
             // Also prepare to load assignedBy user info
-            $query = TblCcPhoneCollection::with('batch');
+            $query = TblCcPhoneCollection::with(['batch', 'subBatch']);
 
             // Filter by status if provided
             if ($request->has('status') && !empty($request->status)) {
@@ -340,8 +340,9 @@ class TblCcPhoneCollectionController extends Controller
                     'penaltyAmount' => $pc->penaltyAmount,
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
-                    'subBatchId' => $pc->subBatchId,
-                    'batchCode' => $pc->batch?->code, // NEW: Batch code from relationship
+                    'batchName' => $pc->batch?->batchName,           // ← ĐỔI: batchCode → batchName
+                    'subBatchId' => $pc->subBatchId,                  // ← THÊM: subBatchId
+                    'subBatchName' => $pc->subBatch?->batchName,
                     'createdAt' => $pc->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatedAt' => $pc->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                 ];
