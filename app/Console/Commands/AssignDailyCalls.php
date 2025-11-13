@@ -54,63 +54,121 @@ class AssignDailyCalls extends Command
 
             DB::beginTransaction();
 
-            // Step 1: Get all distinct batchIds from phone collections
-            $batchIds = TblCcPhoneCollection::whereNotNull('batchId')
-                ->distinct()
-                ->pluck('batchId')
-                ->toArray();
+            // Step 1: Get all parent batches (batches where parentBatchId IS NULL)
+            $parentBatches = \App\Models\TblCcBatch::whereNull('parentBatchId')
+                ->where('batchActive', true)
+                ->get(); // Get full objects, not just IDs
 
-            if (empty($batchIds)) {
-                $this->warn('No batches found in phone collections.');
+            if ($parentBatches->isEmpty()) {
+                $this->warn('No parent batches found for assignment.');
                 return self::SUCCESS;
             }
 
-            $this->info("Found " . count($batchIds) . " batches to process: " . implode(', ', $batchIds));
+            $this->info("Found " . $parentBatches->count() . " parent batches to process");
             $this->newLine();
 
             $allAssignments = [];
             $totalCallsAssigned = 0;
 
-            // Step 2: Process each batch separately
-            foreach ($batchIds as $batchId) {
+            // Step 2: Process each parent batch separately
+            foreach ($parentBatches as $parentBatch) {
+                $parentBatchId = $parentBatch->batchId;
+
                 // ✅ SKIP batch 1 (past-due) - will be assigned via team level config API
-                if ($batchId == 1) {
-                    $this->warn("  ⏭️  Skipping Batch 1 (past-due) - should be assigned via team level config API");
+                if ($parentBatchId == 1) {
+                    $this->warn("  ⭐️  Skipping Batch 1 (past-due) - should be assigned via team level config API");
                     $this->newLine();
                     continue;
                 }
 
-                $this->info("📦 Processing Batch {$batchId}");
+                $this->info("📦 Processing Parent Batch {$parentBatchId} ({$parentBatch->batchName})");
                 $this->info(str_repeat('-', 60));
 
-                // Get available agents for this batch
-                $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate, $batchId);
+                // Check if this batch has intensity (self-contained) or has sub-batches
+                if ($parentBatch->intensity !== null) {
+                    // ===== CASE 1: Batch has intensity (e.g., batch 2, 3, 4) =====
+                    $this->info("  📌 Type: Self-contained batch (has intensity)");
 
-                if ($availableAgents->isEmpty()) {
-                    $this->warn("  ⚠️  No agents available for batch {$batchId} on {$assignmentDate}");
-                    $this->warn("  Please ensure duty roster is created for this batch.");
-                    $this->newLine();
-                    continue;
+                    // Get available agents for this batch
+                    $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate, $parentBatchId);
+
+                    if ($availableAgents->isEmpty()) {
+                        $this->warn("  ⚠️  No agents available for batch {$parentBatchId} on {$assignmentDate}");
+                        $this->warn("  Please ensure duty roster is created for this batch.");
+                        $this->newLine();
+                        continue;
+                    }
+
+                    $this->info("  ✓ Found {$availableAgents->count()} available agents");
+
+                    // Get calls to assign for this batch (use batchId directly)
+                    $callsToAssign = TblCcPhoneCollection::where('batchId', $parentBatchId)
+                        ->whereNull('assignedTo')
+                        ->orderBy('daysOverdueGross', 'asc')
+                        ->orderBy('createdAt', 'asc')
+                        ->get();
+
+                    if ($callsToAssign->isEmpty()) {
+                        $this->warn("  ℹ️  No unassigned calls found for batch {$parentBatchId}");
+                        $this->newLine();
+                        continue;
+                    }
+
+                    $this->info("  ✓ Found {$callsToAssign->count()} calls to assign");
+
+                } else {
+                    // ===== CASE 2: Batch has NO intensity (e.g., batch 8) =====
+                    $this->info("  📌 Type: Parent batch with sub-batches (no intensity)");
+
+                    // Get sub-batches for this parent batch
+                    $subBatches = \App\Models\TblCcBatch::where('parentBatchId', $parentBatchId)
+                        ->where('batchActive', true)
+                        ->whereNotNull('intensity')
+                        ->get();
+
+                    if ($subBatches->isEmpty()) {
+                        $this->warn("  ⚠️  No active sub-batches found for parent batch {$parentBatchId}");
+                        $this->newLine();
+                        continue;
+                    }
+
+                    $subBatchIds = $subBatches->pluck('batchId')->toArray();
+                    $subBatchNames = $subBatches->pluck('batchName')->toArray();
+
+                    $this->info("  ✓ Found " . count($subBatchIds) . " sub-batches:");
+                    foreach ($subBatches as $subBatch) {
+                        $this->info("     - Batch {$subBatch->batchId}: {$subBatch->batchName}");
+                    }
+
+                    // Get available agents for this parent batch (duty roster is for parent)
+                    $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate, $parentBatchId);
+
+                    if ($availableAgents->isEmpty()) {
+                        $this->warn("  ⚠️  No agents available for parent batch {$parentBatchId} on {$assignmentDate}");
+                        $this->warn("  Please ensure duty roster is created for this parent batch.");
+                        $this->newLine();
+                        continue;
+                    }
+
+                    $this->info("  ✓ Found {$availableAgents->count()} available agents");
+
+                    // Get calls to assign from ALL sub-batches (using subBatchId)
+                    $callsToAssign = TblCcPhoneCollection::whereIn('subBatchId', $subBatchIds)
+                        ->whereNull('assignedTo')
+                        ->orderBy('daysOverdueGross', 'asc')
+                        ->orderBy('createdAt', 'asc')
+                        ->get();
+
+                    if ($callsToAssign->isEmpty()) {
+                        $this->warn("  ℹ️  No unassigned calls found for sub-batches: " . implode(', ', $subBatchIds));
+                        $this->newLine();
+                        continue;
+                    }
+
+                    $this->info("  ✓ Found {$callsToAssign->count()} calls to assign from sub-batches");
                 }
 
-                $this->info("  ✓ Found {$availableAgents->count()} available agents for batch {$batchId}");
-
-                // Get calls to assign for this batch
-                $callsToAssign = TblCcPhoneCollection::where('batchId', $batchId)
-                    ->whereNull('assignedTo')
-                    ->orderBy('daysOverdueGross', 'asc')
-                    ->orderBy('createdAt', 'asc')
-                    ->get();
-
-                if ($callsToAssign->isEmpty()) {
-                    $this->warn("  ℹ️  No unassigned calls found for batch {$batchId}");
-                    $this->newLine();
-                    continue;
-                }
-
-                $this->info("  ✓ Found {$callsToAssign->count()} calls to assign for batch {$batchId}");
-
-                // Perform round-robin assignment for this batch
+                // Perform round-robin assignment
                 $this->info("  🔄 Assigning calls...");
                 $bar = $this->output->createProgressBar($callsToAssign->count());
                 $bar->start();
@@ -120,17 +178,17 @@ class AssignDailyCalls extends Command
                     $availableAgents,
                     $assignedBy,
                     $assignmentDate,
-                    $batchId,
+                    $parentBatchId,
                     $bar
                 );
 
                 $bar->finish();
                 $this->newLine();
 
-                $allAssignments[$batchId] = $batchAssignments;
+                $allAssignments[$parentBatchId] = $batchAssignments;
                 $totalCallsAssigned += count($batchAssignments);
 
-                $this->info("  ✅ Assigned {$callsToAssign->count()} calls to {$availableAgents->count()} agents for batch {$batchId}");
+                $this->info("  ✅ Assigned {$callsToAssign->count()} calls to {$availableAgents->count()} agents for batch {$parentBatchId}");
                 $this->newLine();
             }
 
