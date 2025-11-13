@@ -340,6 +340,7 @@ class TblCcPhoneCollectionController extends Controller
                     'penaltyAmount' => $pc->penaltyAmount,
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
+                    'batchCode' => $pc->batchCode,
                     'batchName' => $pc->batch?->batchName,           // ← ĐỔI: batchCode → batchName
                     'subBatchId' => $pc->subBatchId,                  // ← THÊM: subBatchId
                     'subBatchName' => $pc->subBatch?->batchName,
