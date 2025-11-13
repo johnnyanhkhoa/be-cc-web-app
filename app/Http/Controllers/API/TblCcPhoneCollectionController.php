@@ -340,6 +340,7 @@ class TblCcPhoneCollectionController extends Controller
                     'penaltyAmount' => $pc->penaltyAmount,
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
+                    'subBatchId' => $pc->subBatchId,
                     'batchCode' => $pc->batch?->code, // NEW: Batch code from relationship
                     'createdAt' => $pc->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'updatedAt' => $pc->updatedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
