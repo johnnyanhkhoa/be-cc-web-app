@@ -290,16 +290,34 @@ class TblCcPhoneCollectionController extends Controller
                 ->values()
                 ->toArray();
 
-            // Batch load users for assignedBy
+            // Get unique assignedTo values (excluding null) to batch query users
+            $assignedToIds = $phoneCollections
+                ->pluck('assignedTo')
+                ->filter(function ($assignedTo) {
+                    return $assignedTo !== null;
+                })
+                ->unique()
+                ->values()
+                ->toArray();
+
+            // Batch load users for assignedBy and assignedTo
             $assignedByUsers = [];
-            if (!empty($assignedByIds)) {
-                $assignedByUsers = User::whereIn('authUserId', $assignedByIds)
+            $assignedToUsers = [];
+
+            // Merge both arrays and query once for efficiency
+            $allUserIds = array_unique(array_merge($assignedByIds, $assignedToIds));
+
+            if (!empty($allUserIds)) {
+                $users = User::whereIn('authUserId', $allUserIds)
                     ->get()
                     ->keyBy('authUserId');
+
+                $assignedByUsers = $users;
+                $assignedToUsers = $users;
             }
 
-            // Transform data to include batchCode and assignedByName
-            $transformedData = $phoneCollections->map(function ($pc) use ($assignedByUsers) {
+            // Transform data to include batchName, subBatchId, subBatchName, assignedByName, assignedToName
+            $transformedData = $phoneCollections->map(function ($pc) use ($assignedByUsers, $assignedToUsers) {
                 // Determine assignedByName
                 $assignedByName = null;
                 if ($pc->assignedBy !== null) {
@@ -310,12 +328,19 @@ class TblCcPhoneCollectionController extends Controller
                     }
                 }
 
+                // Determine assignedToName
+                $assignedToName = null;
+                if ($pc->assignedTo !== null && isset($assignedToUsers[$pc->assignedTo])) {
+                    $assignedToName = $assignedToUsers[$pc->assignedTo]->userFullName;
+                }
+
                 return [
                     'phoneCollectionId' => $pc->phoneCollectionId,
                     'status' => $pc->status,
                     'assignedTo' => $pc->assignedTo,
+                    'assignedToName' => $assignedToName,      // ← NEW FIELD
                     'assignedBy' => $pc->assignedBy,
-                    'assignedByName' => $assignedByName,  // ← NEW FIELD
+                    'assignedByName' => $assignedByName,
                     'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'totalAttempts' => $pc->totalAttempts,
                     'lastAttemptAt' => $pc->lastAttemptAt?->utc()->format('Y-m-d\TH:i:s\Z'),
