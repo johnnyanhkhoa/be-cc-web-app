@@ -49,11 +49,13 @@ class MonitoringController extends Controller
                 )
                 ->get();
 
-            // Get all active batches
-            $allBatches = TblCcBatch::where('batchActive', true)->get();
+            // Get all active batches with intensity (exclude parent batches like batch 8)
+            $allBatches = TblCcBatch::where('batchActive', true)
+                ->whereNotNull('intensity')
+                ->get();
 
-            // Group assignments by batch
-            $assignmentsByBatch = $assignments->groupBy('batchId');
+            // Group assignments by subBatchId (not batchId)
+            $assignmentsByBatch = $assignments->groupBy('subBatchId');
 
             // Calculate batch details for ALL batches
             $batchDetails = [];
@@ -163,15 +165,17 @@ class MonitoringController extends Controller
             $grandTotalPending = 0;
             $grandTotalCompleted = 0;
 
-            // Get all active batches
-            $allBatches = TblCcBatch::where('batchActive', true)->get();
+            // Get all active batches with intensity (exclude parent batches like batch 8)
+            $allBatches = TblCcBatch::where('batchActive', true)
+                ->whereNotNull('intensity')
+                ->get();
 
             foreach ($assignmentsByCCO as $authUserId => $ccoAssignments) {
                 $user = User::where('authUserId', $authUserId)->first();
                 if (!$user) continue;
 
-                // Group by batch for this CCO
-                $assignmentsByBatch = $ccoAssignments->groupBy('batchId');
+                // Group by subBatchId for this CCO (not batchId)
+                $assignmentsByBatch = $ccoAssignments->groupBy('subBatchId');
 
                 $batchDetails = [];
                 $totalAssigned = 0;
