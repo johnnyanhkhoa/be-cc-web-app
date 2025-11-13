@@ -147,13 +147,13 @@ class TeamLevelConfigController extends Controller
             // Create new approved config
             $config = TblCcTeamLevelConfig::create([
                 'targetDate' => $request->targetDate,
-                'batchId' => 1,  // ← THÊM
+                'batchId' => 1,
                 'teamLeaderCount' => $suggestedConfig->teamLeaderCount,
                 'seniorCount' => $suggestedConfig->seniorCount,
                 'midLevelCount' => $suggestedConfig->midLevelCount,
                 'juniorCount' => $suggestedConfig->juniorCount,
                 'totalAgents' => $suggestedConfig->totalAgents,
-                'totalCalls' => $suggestedConfig->totalCalls,  // ← THÊM
+                'totalCalls' => $suggestedConfig->totalCalls,
                 'teamLeaderPercentage' => $request->teamLeaderPercentage,
                 'seniorPercentage' => $request->seniorPercentage,
                 'midLevelPercentage' => $request->midLevelPercentage,
@@ -164,6 +164,8 @@ class TeamLevelConfigController extends Controller
                 'remarks' => $request->remarks,
                 'basedOnConfigId' => $suggestedConfig->configId,
                 'createdBy' => $creatorUser->id,
+                'approvedBy' => $creatorUser->id,  // ← THÊM: Giống với createdBy
+                'approvedAt' => now(),              // ← THÊM: Thời gian approve
             ]);
 
             DB::commit();
