@@ -185,6 +185,54 @@ class TblCcBatch extends Model
     }
 
     /**
+     * Relationship: Get child batches (batches that have this batch as parent)
+     */
+    public function children()
+    {
+        return $this->hasMany(TblCcBatch::class, 'parentBatchId', 'batchId');
+    }
+
+    /**
+     * Relationship: Get parent batch
+     */
+    public function parent()
+    {
+        return $this->belongsTo(TblCcBatch::class, 'parentBatchId', 'batchId');
+    }
+
+    /**
+     * Check if this batch has child batches
+     */
+    public function hasChildren(): bool
+    {
+        return $this->children()->exists();
+    }
+
+    /**
+     * Get all child batch IDs
+     */
+    public function getChildBatchIds(): array
+    {
+        return $this->children()->pluck('batchId')->toArray();
+    }
+
+    /**
+     * Check if this batch is a parent batch (has no parent)
+     */
+    public function isParentBatch(): bool
+    {
+        return $this->parentBatchId === null;
+    }
+
+    /**
+     * Scope: Get only parent batches (batches with no parent)
+     */
+    public function scopeParentBatches($query)
+    {
+        return $query->whereNull('parentBatchId');
+    }
+
+    /**
      * Boot the model to automatically set audit fields
      */
     protected static function boot()

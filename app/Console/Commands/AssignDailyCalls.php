@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\TblCcPhoneCollection;
+use App\Models\TblCcBatch;
 use App\Models\User;
 use App\Models\DutyRoster;
 use Illuminate\Console\Command;
@@ -54,25 +55,28 @@ class AssignDailyCalls extends Command
 
             DB::beginTransaction();
 
-            // Step 1: Get all distinct batchIds from phone collections
-            $batchIds = TblCcPhoneCollection::whereNotNull('batchId')
-                ->distinct()
-                ->pluck('batchId')
-                ->toArray();
+            // Step 1: Get all parent batches (batches with parentBatchId = NULL)
+            // These are the batches that have duty rosters
+            $parentBatches = TblCcBatch::parentBatches()
+                ->orderBy('batchId', 'asc')
+                ->get();
 
-            if (empty($batchIds)) {
-                $this->warn('No batches found in phone collections.');
+            if ($parentBatches->isEmpty()) {
+                $this->warn('No parent batches found.');
                 return self::SUCCESS;
             }
 
-            $this->info("Found " . count($batchIds) . " batches to process: " . implode(', ', $batchIds));
+            $this->info("Found " . $parentBatches->count() . " parent batches to process: " .
+                $parentBatches->pluck('batchId')->implode(', '));
             $this->newLine();
 
             $allAssignments = [];
             $totalCallsAssigned = 0;
 
-            // Step 2: Process each batch separately
-            foreach ($batchIds as $batchId) {
+            // Step 2: Process each parent batch separately
+            foreach ($parentBatches as $batch) {
+                $batchId = $batch->batchId;
+
                 // ✅ SKIP batch 1 (past-due) - will be assigned via team level config API
                 if ($batchId == 1) {
                     $this->warn("  ⏭️  Skipping Batch 1 (past-due) - should be assigned via team level config API");
@@ -80,8 +84,18 @@ class AssignDailyCalls extends Command
                     continue;
                 }
 
-                $this->info("📦 Processing Batch {$batchId}");
+                $this->info("📦 Processing Batch {$batchId} ({$batch->batchName})");
                 $this->info(str_repeat('-', 60));
+
+                // Check if this batch has child batches
+                $childBatchIds = $batch->getChildBatchIds();
+
+                if (!empty($childBatchIds)) {
+                    $this->info("  ℹ️  Parent batch with children: " . implode(', ', $childBatchIds));
+                    $this->info("  📋 Will assign calls from sub-batches: " . implode(', ', $childBatchIds));
+                } else {
+                    $this->info("  ℹ️  Standalone batch (no children)");
+                }
 
                 // Get available agents for this batch
                 $availableAgents = DutyRoster::getAvailableAgentsForDate($assignmentDate, $batchId);
@@ -96,11 +110,23 @@ class AssignDailyCalls extends Command
                 $this->info("  ✓ Found {$availableAgents->count()} available agents for batch {$batchId}");
 
                 // Get calls to assign for this batch
-                $callsToAssign = TblCcPhoneCollection::where('batchId', $batchId)
-                    ->whereNull('assignedTo')
-                    ->orderBy('daysOverdueGross', 'asc')
-                    ->orderBy('createdAt', 'asc')
-                    ->get();
+                // If batch has children: filter by subBatchId IN (child batch ids)
+                // If no children: filter by batchId (for backward compatibility)
+                if (!empty($childBatchIds)) {
+                    // Parent batch with children: get calls from child sub-batches
+                    $callsToAssign = TblCcPhoneCollection::whereIn('subBatchId', $childBatchIds)
+                        ->whereNull('assignedTo')
+                        ->orderBy('daysOverdueGross', 'asc')
+                        ->orderBy('createdAt', 'asc')
+                        ->get();
+                } else {
+                    // Standalone batch: get calls by batchId (original logic)
+                    $callsToAssign = TblCcPhoneCollection::where('batchId', $batchId)
+                        ->whereNull('assignedTo')
+                        ->orderBy('daysOverdueGross', 'asc')
+                        ->orderBy('createdAt', 'asc')
+                        ->get();
+                }
 
                 if ($callsToAssign->isEmpty()) {
                     $this->warn("  ℹ️  No unassigned calls found for batch {$batchId}");
