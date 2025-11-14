@@ -334,24 +334,24 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ], 404);
             }
 
-            if (!$phoneCollection->batchId) {
+            if (!$phoneCollection->subBatchId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No batch assigned to this phone collection',
-                    'error' => 'batchId is null for this phone collection'
+                    'message' => 'No sub-batch assigned to this phone collection',
+                    'error' => 'subBatchId is null for this phone collection'
                 ], 400);
             }
 
-            $batchId = $phoneCollection->batchId;
+            $subBatchId = $phoneCollection->subBatchId;
 
-            Log::info('Found batchId for phone collection', [
+            Log::info('Found subBatchId for phone collection', [
                 'phone_collection_id' => $phoneCollectionId,
-                'batch_id' => $batchId
+                'sub_batch_id' => $subBatchId
             ]);
 
-            // Step 2: Get case results for this batch
+            // Step 2: Get case results for this sub-batch
             $caseResults = TblCcCaseResult::active()
-                                        ->byBatch($batchId)
+                                        ->byBatch($subBatchId)
                                         ->orderBy('caseResultName')
                                         ->get([
                                             'caseResultId',
@@ -363,7 +363,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                                         ]);
 
             Log::info('Case results retrieved', [
-                'batch_id' => $batchId,
+                'sub_batch_id' => $subBatchId,
                 'results_count' => $caseResults->count()
             ]);
 
@@ -373,7 +373,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                 'data' => [
                     'phone_collection' => [
                         'id' => $phoneCollection->phoneCollectionId,
-                        'batch_id' => $batchId,
+                        'batch_id' => $phoneCollection->batchId,      // Parent batch
+                        'sub_batch_id' => $subBatchId,                 // Sub-batch (used for query)
                         'contract_no' => $phoneCollection->contractNo,
                         'customer_name' => $phoneCollection->customerFullName,
                     ],
