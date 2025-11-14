@@ -621,6 +621,17 @@ class TeamLevelConfigController extends Controller
                 'assigned_by' => $assignedByAuthUserId
             ]);
 
+            // Verify assignedBy user exists and get local id
+            $assignedByUser = User::where('authUserId', $assignedByAuthUserId)->first();
+
+            if (!$assignedByUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Assigned by user not found',
+                    'error' => "User with authUserId {$assignedByAuthUserId} does not exist"
+                ], 404);
+            }
+
             // Execute assignment
             $assignmentService = app(TeamLevelAssignmentService::class);
             $result = $assignmentService->assignCallsByTeamLevel(
@@ -629,11 +640,11 @@ class TeamLevelConfigController extends Controller
                 $assignedByAuthUserId
             );
 
-            // ✅ THÊM: Update isAssigned = true
+            // ✅ Update isAssigned, assignedBy, assignedAt
             $config->update([
                 'isAssigned' => true,
-                'assignedBy' => $creatorUser->id,  // ← THÊM: Lưu local user id
-                'assignedAt' => now(),              // ← THÊM: Thời gian assign
+                'assignedBy' => $assignedByUser->id,  // ✅ ĐÚNG: Dùng local user id
+                'assignedAt' => now(),
             ]);
 
             // ✅ NEW: Also lock duty roster for batch 1
