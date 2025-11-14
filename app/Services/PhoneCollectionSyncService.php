@@ -198,39 +198,76 @@ class PhoneCollectionSyncService
                 $finalBatchId = in_array($batchId, [5, 6, 7]) ? 8 : $batchId;
 
                 $insertData[] = [
-                    // Required fields from API
+                    // === Basic contract info ===
                     'contractId' => $contract['contractId'],
                     'contractNo' => $contract['contractNo'],
                     'contractDate' => $contract['contractDate'],
                     'contractType' => $contract['contractType'],
                     'contractingProductType' => $contract['contractingProductType'],
+
+                    // === Customer info ===
                     'customerId' => $contract['customerId'],
                     'customerFullName' => $contract['customerFullName'],
                     'gender' => $this->mapGender($contract['gender']),
                     'birthDate' => $contract['birthDate'],
                     'customerAge' => $contract['customerAge'] ?? null,
+
+                    // === Contact info (NEW) ===
+                    'phoneNo1' => $contract['phoneNo1'] ?? null,
+                    'phoneNo2' => $contract['phoneNo2'] ?? null,
+                    'phoneNo3' => $contract['phoneNo3'] ?? null,
+                    'homeAddress' => $contract['homeAddress'] ?? null,
+
+                    // === Location info (NEW) ===
+                    'contractPlaceId' => $contract['contractPlaceId'] ?? null,
+                    'contractPlaceName' => $contract['contractPlaceName'] ?? null,
+                    'salesAreaId' => $contract['salesAreaId'] ?? null,
+                    'salesAreaName' => $contract['salesAreaName'] ?? null,
+
+                    // === Asset info ===
                     'assetId' => $contract['assetId'],
+                    'productName' => $contract['productName'] ?? null,      // NEW
+                    'productColor' => $contract['productColor'] ?? null,    // NEW
+                    'plateNo' => $contract['plateNo'] ?? null,              // NEW
+                    'unitPrice' => $contract['unitPrice'] ?? null,          // NEW
+
+                    // === Payment info ===
                     'paymentId' => $contract['paymentId'],
                     'paymentNo' => $contract['paymentNo'],
                     'dueDate' => $contract['dueDate'],
                     'daysOverdueGross' => $contract['daysOverdueGross'],
                     'daysOverdueNet' => $contract['daysOverdueNet'],
-                    'daysSinceLastPayment' => $contract['daysSinceLastPayment'],
-                    'lastPaymentDate' => $contract['lastPaymentDate'],
+                    'daysSinceLastPayment' => $contract['daysSinceLastPayment'] ?? null,
+                    'lastPaymentDate' => $contract['lastPaymentDate'] ?? null,
                     'paymentAmount' => $contract['paymentAmount'],
                     'penaltyAmount' => $contract['penaltyAmount'],
                     'totalAmount' => $contract['totalAmount'],
                     'amountPaid' => $contract['amountPaid'],
                     'amountUnpaid' => $contract['amountUnpaid'],
-                    'hasKYCAppAccount' => $contract['hasKYCAppAccount'] ?? false,
 
-                    // Segment and batch info
+                    // === Payment status (SKIP due to API bug) ===
+                    'paymentStatus' => null,  // TODO: Add when Maximus fixes bug
+
+                    // === Promise to Pay & Penalty (NEW) ===
+                    'latestPtpDate' => $contract['latestPtpDate'] ?? null,
+                    'penaltyExempted' => isset($contract['penaltyExempted']) && $contract['penaltyExempted'] == 1,
+                    'reschedule' => $contract['reschedule'] ?? null,
+
+                    // === Penalty details (TODO: Request Maximus to add) ===
+                    'totalPenaltyFeesCharged' => null,
+                    'noOfPenaltyFeesExempted' => null,
+                    'noOfPenaltyFeesPaid' => null,
+                    'totalPenaltyAmountCharged' => null,
+                    'noOfAskingPostponePayment' => null,
+
+                    // === Account & Segment info ===
+                    'hasKYCAppAccount' => isset($contract['hasKYCAppAccount']) && $contract['hasKYCAppAccount'] == 1,
                     'segmentType' => $segmentType,
-                    'batchId' => $finalBatchId,        // ✅ 5,6,7 → 8; others stay same
-                    'subBatchId' => $originalBatchId,  // ✅ Keep original batchId
+                    'batchId' => $finalBatchId,        // 5,6,7 → 8; others stay same
+                    'subBatchId' => $originalBatchId,  // Keep original batchId
                     'riskType' => $contract['preDueRiskSegment'] ?? null,
 
-                    // Default values
+                    // === Default values ===
                     'status' => 'pending',
                     'totalAttempts' => 0,
                     'createdBy' => 1,
