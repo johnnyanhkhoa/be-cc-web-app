@@ -301,6 +301,9 @@ Route::prefix('cc/team-level-config')->group(function () {
     // Approve configuration
     Route::post('/{configId}/approve', [TeamLevelConfigController::class, 'approveConfig']);
 
+    // Unapprove config (NEW)
+    Route::post('/{configId}/unapprove', [TeamLevelConfigController::class,'unapproveConfig']);
+
     // NEW: Preview assignment (BEFORE actually assigning)
     Route::post('/preview-assignment', [TeamLevelConfigController::class, 'previewAssignment']);
 

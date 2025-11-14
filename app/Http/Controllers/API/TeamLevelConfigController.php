@@ -285,6 +285,90 @@ class TeamLevelConfigController extends Controller
     }
 
     /**
+     * Unapprove configuration (revert from approved to suggested)
+     *
+     * POST /api/cc/team-level-config/{configId}/unapprove
+     *
+     * @param int $configId
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function unapproveConfig(int $configId, Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'updatedBy' => 'required|integer|exists:users,authUserId',
+            ]);
+
+            $updatedByAuthUserId = $request->input('updatedBy');
+            $updatedByUser = User::where('authUserId', $updatedByAuthUserId)->first();
+
+            $config = TblCcTeamLevelConfig::find($configId);
+
+            if (!$config) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Config not found',
+                ], 404);
+            }
+
+            if ($config->configType !== TblCcTeamLevelConfig::TYPE_APPROVED) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only approved configs can be unapproved',
+                ], 400);
+            }
+
+            // Check if config has been used for assignment
+            if ($config->isAssigned) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot unapprove config that has already been used for assignment',
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            // Update config back to suggested
+            $config->update([
+                'configType' => TblCcTeamLevelConfig::TYPE_SUGGESTED,
+                'approvedBy' => null,      // Clear approval info
+                'approvedAt' => null,      // Clear approval timestamp
+                'updatedBy' => $updatedByUser->id,
+                'updatedAt' => now(),
+            ]);
+
+            DB::commit();
+
+            Log::info('Config unapproved successfully', [
+                'config_id' => $config->configId,
+                'updated_by_auth_user_id' => $updatedByAuthUserId,
+                'target_date' => $config->targetDate->format('Y-m-d')
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Config unapproved successfully',
+                'data' => $this->formatConfigResponse($config->fresh())
+            ], 200);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to unapprove config', [
+                'config_id' => $configId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to unapprove config',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get configuration history
      *
      * GET /api/v1/cc/team-level-config/history
