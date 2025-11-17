@@ -701,12 +701,27 @@ class TblCcPhoneCollectionController extends Controller
                 'to_date' => $toDate
             ]);
 
-            // Query phone collections in date range
-            $phoneCollections = TblCcPhoneCollection::whereRaw(
-                    'DATE("assignedAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
+            // Query phone collections in date range WITH promise history
+            $phoneCollections = TblCcPhoneCollection::select([
+                    'tbl_CcPhoneCollection.*',
+                    'latest_promise.promisedPaymentDate as latest_promisedPaymentDate',
+                    'latest_promise.dtCallLater as latest_dtCallLater'
+                ])
+                ->leftJoin('tbl_CcPromiseHistory as latest_promise', function($join) {
+                    $join->on('latest_promise.paymentId', '=', 'tbl_CcPhoneCollection.paymentId')
+                        ->where('latest_promise.isActive', '=', true)
+                        ->whereRaw('"latest_promise"."createdAt" = (
+                            SELECT MAX("ph2"."createdAt")
+                            FROM "tbl_CcPromiseHistory" "ph2"
+                            WHERE "ph2"."paymentId" = "tbl_CcPhoneCollection"."paymentId"
+                            AND "ph2"."isActive" = true
+                        )');
+                })
+                ->whereRaw(
+                    'DATE("tbl_CcPhoneCollection"."assignedAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
                     [$fromDate, $toDate]
                 )
-                ->orderBy('assignedAt', 'asc')
+                ->orderBy('tbl_CcPhoneCollection.assignedAt', 'asc')
                 ->get();
 
             if ($phoneCollections->isEmpty()) {
@@ -780,8 +795,36 @@ class TblCcPhoneCollectionController extends Controller
                     ->keyBy('reasonId');
             }
 
+            // ============================================================
+            // Count askingPostponePayment per contractId (FULL HISTORY)
+            // ============================================================
+            $contractIds = $phoneCollections->pluck('contractId')->filter()->unique()->toArray();
+            $postponeCountByContract = [];
+
+            if (!empty($contractIds)) {
+                $postponeCounts = DB::table('tbl_CcPhoneCollectionDetail as pcd')
+                    ->join('tbl_CcPhoneCollection as pc', 'pc.phoneCollectionId', '=', 'pcd.phoneCollectionId')
+                    ->whereIn('pc.contractId', $contractIds)
+                    ->where('pcd.askingPostponePayment', '=', true)
+                    ->groupBy('pc.contractId')
+                    ->select([
+                        'pc.contractId',
+                        DB::raw('COUNT(*) as postpone_count')
+                    ])
+                    ->get();
+
+                foreach ($postponeCounts as $count) {
+                    $postponeCountByContract[$count->contractId] = (int)$count->postpone_count;
+                }
+
+                Log::info('Counted askingPostponePayment per contract', [
+                    'total_contracts_with_postpone' => count($postponeCountByContract)
+                ]);
+            }
+            // ============================================================
+
             // Transform data
-            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons) {
+            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons, $postponeCountByContract) {
                 // Get user names
                 $assignedByName = null;
                 if ($pc->assignedBy) {
@@ -881,6 +924,19 @@ class TblCcPhoneCollectionController extends Controller
                     'noOfPenaltyFeesExempted' => $pc->noOfPenaltyFeesExempted,
                     'noOfPenaltyFeesPaid' => $pc->noOfPenaltyFeesPaid,
                     'totalPenaltyAmountCharged' => $pc->totalPenaltyAmountCharged,
+
+                    // ============================================================
+                    // Promise and Postpone Info
+                    // ============================================================
+                    'promisedPaymentDate' => $pc->latest_promisedPaymentDate
+                        ? \Carbon\Carbon::parse($pc->latest_promisedPaymentDate)->format('Y-m-d')
+                        : null,
+                    'dtCallLater' => $pc->latest_dtCallLater
+                        ? \Carbon\Carbon::parse($pc->latest_dtCallLater)->utc()->format('Y-m-d\TH:i:s\Z')
+                        : null,
+                    'noOfAskingPostponePayment' => $postponeCountByContract[$pc->contractId] ?? 0,
+                    // ============================================================
+
                     'source' => 'phone-collection',
                 ];
             });
