@@ -34,5 +34,8 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
-
+    'users_ms' => [
+        'base_url' => env('USERS_MS_BASE_URL', 'https://users-ms.vnapp.xyz'),
+        'call_collection_team_id' => env('CALL_COLLECTION_TEAM_ID', 4),
+    ],
 ];

@@ -12,49 +12,54 @@ class AuthService
     private const BASE_URL = 'https://users-ms.vnapp.xyz';
     private const LOGIN_ENDPOINT = '/oauth/token';
 
-    // Fixed credentials as per requirements
-    private const GRANT_TYPE = 'password';
-    private const CLIENT_ID = '0197d55c-7338-7249-b9ca-6be67b78b007';
-    private const CLIENT_SECRET = '3B17cBmoTaGdeGqTxFQXb96OplIEm0jfAMicuxtR';
-
     /**
-     * Authenticate user with external auth API
+     * Authenticate user with new login API
      *
-     * @param string $username
+     * @param string $email
      * @param string $password
      * @return array
      * @throws Exception
      */
-    public function login(string $username, string $password): array // Tạm thời comment lại bởi vì Auth của Zay Yar bị lỗi
+    public function login(string $email, string $password): array
     {
         try {
-            $loginData = [
-                'username' => trim($username),
-                'password' => $password,
-                'grant_type' => self::GRANT_TYPE,
-                'client_id' => self::CLIENT_ID,
-                'client_secret' => self::CLIENT_SECRET,
-            ];
-
-            Log::info('Attempting external authentication', [
-                'username' => $username,
-                'endpoint' => self::BASE_URL . self::LOGIN_ENDPOINT
+            Log::info('Attempting authentication with new login API', [
+                'email' => $email,
             ]);
 
+            // Get team ID from config
+            $teamId = config('services.users_ms.call_collection_team_id');
+
+            if (!$teamId) {
+                throw new Exception('Call Collection team ID not configured', 500);
+            }
+
+            Log::info('Using Call Collection team ID', [
+                'team_id' => $teamId
+            ]);
+
+            // Call new login API
             $response = Http::timeout(30)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
+                    'X-Team-Id' => (string)$teamId,
                 ])
-                ->post(self::BASE_URL . self::LOGIN_ENDPOINT, $loginData);
+                ->post(self::BASE_URL . '/api/login', [
+                    'email' => trim($email),
+                    'password' => $password,
+                ]);
 
             if ($response->successful()) {
                 $data = $response->json();
 
-                Log::info('External authentication successful', [
-                    'username' => $username,
-                    'token_type' => $data['token_type'] ?? 'unknown',
-                    'expires_in' => $data['expires_in'] ?? 0
+                Log::info('Authentication successful', [
+                    'email' => $email,
+                    'user_id' => $data['current_user']['user']['user_id'] ?? null,
+                    'username' => $data['current_user']['user']['username'] ?? null,
+                    'roles' => $data['current_user']['roles'] ?? [],
+                    'permissions' => $data['current_user']['permissions'] ?? [],
+                    'expires_at' => $data['expires_at'] ?? null,
                 ]);
 
                 return $data;
@@ -62,8 +67,8 @@ class AuthService
 
             // Handle authentication failure
             $errorData = $response->json();
-            Log::warning('External authentication failed', [
-                'username' => $username,
+            Log::warning('Authentication failed', [
+                'email' => $email,
                 'status' => $response->status(),
                 'error' => $errorData
             ]);
@@ -74,14 +79,14 @@ class AuthService
             );
 
         } catch (Exception $e) {
-            Log::error('External API connection error', [
-                'username' => $username,
+            Log::error('Login API error', [
+                'email' => $email,
                 'error' => $e->getMessage(),
                 'code' => $e->getCode()
             ]);
 
             throw new Exception(
-                'Unable to connect to authentication service: ' . $e->getMessage(),
+                'Unable to authenticate: ' . $e->getMessage(),
                 $e->getCode() ?: 500
             );
         }

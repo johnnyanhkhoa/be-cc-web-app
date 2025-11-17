@@ -18,125 +18,117 @@ class AuthController extends Controller
     ) {}
 
     /**
-     * Login user via external authentication
+     * Login user
      *
-     * @param LoginRequest $request
+     * @param Request $request
      * @return JsonResponse
      */
-    public function login(LoginRequest $request): JsonResponse
+    public function login(Request $request): JsonResponse
     {
         try {
-            // Get credentials from request
-            $username = $request->validated()['username'];
-            $password = $request->validated()['password'];
-
-            Log::info('Login attempt', ['username' => $username]);
-
-            // Step 1: Authenticate with external auth API
-            $authResponse = $this->authService->login($username, $password);
-
-            Log::info('External authentication successful', [
-                'username' => $username,
-                'token_type' => $authResponse['token_type'] ?? 'unknown'
+            // Validate input
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required|string|min:6',
             ]);
 
-            // Step 2: Get current user info using access token (v2 API)
-            $userResponse = $this->authService->getUserInfo($authResponse['access_token']);
+            $email = $request->input('email');
+            $password = $request->input('password');
 
-            // Extract user data from v2 response format
-            $user = $userResponse['data']; // v2 format: data directly contains user info
-            $authUserId = $user['user_id'];
+            // Call new login API (returns: current_user, access_token, token_type, expires_at)
+            $authData = $this->authService->login($email, $password);
 
-            Log::info('User info retrieved from v2 API', [
-                'user_id' => $authUserId,
-                'username' => $user['username'] ?? 'unknown',
-                'email' => $user['email'] ?? 'unknown'
-            ]);
+            // Extract data from new API response
+            $currentUser = $authData['current_user'];
+            $userInfo = $currentUser['user'];
+            $roles = $currentUser['roles'] ?? [];
+            $permissions = $currentUser['permissions'] ?? [];
 
-            // Step 3: Create or update local user
+            $accessToken = $authData['access_token'];
+            $tokenType = $authData['token_type'];
+            $expiresAt = $authData['expires_at'];
+
+            // Calculate expires_in (seconds) from expires_at
+            $expiresIn = null;
+            if ($expiresAt) {
+                try {
+                    $expiresAtTime = \Carbon\Carbon::parse($expiresAt);
+                    $expiresIn = $expiresAtTime->diffInSeconds(now());
+                } catch (\Exception $e) {
+                    Log::warning('Failed to parse expires_at', ['expires_at' => $expiresAt]);
+                }
+            }
+
+            // Sync or update user in local database
             $localUser = User::updateOrCreate(
-                ['authUserId' => $authUserId],
+                ['authUserId' => $userInfo['user_id']],
                 [
-                    'email' => $user['email'],
-                    'username' => $user['username'],
-                    'userFullName' => $user['user_full_name'],
-                    'extensionNo' => $user['ext_no'], // NEW: Save extension number
+                    'username' => $userInfo['username'],
+                    'email' => $userInfo['email'],
+                    'userFullName' => $userInfo['user_full_name'],
+                    'extensionNo' => $userInfo['ext_no'],
+                    'lastLoginAt' => now(),
                     'isActive' => true,
                 ]
             );
 
-            // Step 4: Update last login timestamp
-            $localUser->updateLastLogin();
-
-            Log::info('Login successful', [
+            Log::info('User logged in successfully', [
+                'auth_user_id' => $userInfo['user_id'],
+                'username' => $userInfo['username'],
+                'email' => $userInfo['email'],
                 'local_user_id' => $localUser->id,
-                'authUserId' => $authUserId
+                'roles' => $roles,
+                'permissions' => $permissions,
             ]);
 
-            // Step 5: Return success response
+            // Return response in OLD format (without refresh_token)
             return response()->json([
                 'success' => true,
                 'message' => 'Login successful',
                 'data' => [
                     'user' => [
                         'id' => $localUser->id,
-                        'authUserId' => $localUser->authUserId,
+                        'authUserId' => (string)$localUser->authUserId,
                         'email' => $localUser->email,
                         'username' => $localUser->username,
                         'userFullName' => $localUser->userFullName,
-                        'extensionNo' => $localUser->extensionNo, // NEW
+                        'extensionNo' => $localUser->extensionNo,
                         'isActive' => $localUser->isActive,
-                        'lastLoginAt' => $localUser->lastLoginAt,
+                        'lastLoginAt' => $localUser->lastLoginAt?->utc()->format('Y-m-d\TH:i:s.u\Z'),
                     ],
                     'external_user' => [
-                        'user_id' => $user['user_id'],
-                        'old_user_id' => $user['old_user_id'],
-                        'username' => $user['username'],
-                        'user_full_name' => $user['user_full_name'],
-                        'emp_no' => $user['emp_no'],
-                        'email' => $user['email'],
-                        'phone_no' => $user['phone_no'],
-                        'ext_no' => $user['ext_no'], // Already there
-                        'created_at' => $user['created_at'],
-                        'updated_at' => $user['updated_at'],
+                        'user_id' => $userInfo['user_id'],
+                        'old_user_id' => $userInfo['old_user_id'] ?? null,
+                        'username' => $userInfo['username'],
+                        'user_full_name' => $userInfo['user_full_name'],
+                        'emp_no' => $userInfo['emp_no'],
+                        'email' => $userInfo['email'],
+                        'phone_no' => $userInfo['phone_no'],
+                        'ext_no' => $userInfo['ext_no'],
+                        'created_at' => null,
+                        'updated_at' => null,
                     ],
                     'auth' => [
-                        'token_type' => $authResponse['token_type'],
-                        'access_token' => $authResponse['access_token'],
-                        'refresh_token' => $authResponse['refresh_token'] ?? null,
-                        'expires_in' => $authResponse['expires_in'],
-                    ]
+                        'token_type' => $tokenType,
+                        'access_token' => $accessToken,
+                        'expires_in' => $expiresIn,
+                    ],
+                    'roles' => $roles,              // ← THÊM: Roles từ API mới
+                    'permissions' => $permissions,  // ← THÊM: Permissions từ API mới
                 ]
             ], 200);
 
         } catch (Exception $e) {
             Log::error('Login failed', [
-                'username' => $request->validated()['username'] ?? 'unknown',
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
-                'trace' => $e->getTraceAsString()
             ]);
-
-            // Handle database constraint errors
-            if (str_contains($e->getMessage(), '23505') || str_contains($e->getMessage(), 'unique')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User data conflict. Please try again.',
-                    'error' => 'Database constraint violation'
-                ], 409);
-            }
-
-            // Handle external API errors
-            $statusCode = $e->getCode();
-            if ($statusCode < 100 || $statusCode >= 600) {
-                $statusCode = 400;
-            }
 
             return response()->json([
                 'success' => false,
                 'message' => 'Login failed',
-                'error' => $e->getMessage()
-            ], $statusCode);
+                'error' => config('app.debug') ? $e->getMessage() : 'Authentication failed'
+            ], $e->getCode() ?: 500);
         }
     }
 
