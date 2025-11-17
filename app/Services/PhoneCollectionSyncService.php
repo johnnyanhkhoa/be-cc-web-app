@@ -191,6 +191,38 @@ class PhoneCollectionSyncService
         try {
             DB::beginTransaction();
 
+            $excludedPaymentIds = \App\Models\TblCcPromiseHistory::where('isActive', true)
+                ->where(function($query) {
+                    $query->where('promisedPaymentDate', '>', now()->toDateString())
+                          ->orWhere('dtCallLater', '>', now());
+                })
+                ->pluck('paymentId')
+                ->unique()
+                ->toArray();
+
+            if (!empty($excludedPaymentIds)) {
+                Log::info('Excluding payments with active promises from sync', [
+                    'segment_type' => $segmentType,
+                    'batch_id' => $batchId,
+                    'excluded_count' => count($excludedPaymentIds),
+                    'excluded_payment_ids' => array_slice($excludedPaymentIds, 0, 10) // Log first 10 for debugging
+                ]);
+
+                // Filter contracts array
+                $contracts = array_filter($contracts, function($contract) use ($excludedPaymentIds) {
+                    return !in_array($contract['paymentId'] ?? null, $excludedPaymentIds);
+                });
+
+                // Re-index array after filtering
+                $contracts = array_values($contracts);
+
+                Log::info('Contracts after promise filtering', [
+                    'segment_type' => $segmentType,
+                    'batch_id' => $batchId,
+                    'remaining_count' => count($contracts)
+                ]);
+            }
+
             $insertData = [];
             foreach ($contracts as $index => $contract) {
                 try {
