@@ -49,15 +49,7 @@ class AuthController extends Controller
             $expiresAt = $authData['expires_at'];
 
             // Calculate expires_in (seconds) from expires_at
-            $expiresIn = null;
-            if ($expiresAt) {
-                try {
-                    $expiresAtTime = \Carbon\Carbon::parse($expiresAt);
-                    $expiresIn = $expiresAtTime->diffInSeconds(now());
-                } catch (\Exception $e) {
-                    Log::warning('Failed to parse expires_at', ['expires_at' => $expiresAt]);
-                }
-            }
+            $expiresIn = $expiresAt;
 
             // Sync or update user in local database
             $localUser = User::updateOrCreate(
