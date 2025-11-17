@@ -332,6 +332,12 @@ Route::prefix('monitoring')->group(function () {
     Route::get('ccos', [MonitoringController::class, 'monitorAllCCOs']);
 });
 
+// Export collection report
+Route::get('/cc-phone-collections/export-report', [
+    App\Http\Controllers\API\TblCcPhoneCollectionController::class,
+    'exportReport'
+]);
+
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
 //     Route::prefix('auth')->group(function () {

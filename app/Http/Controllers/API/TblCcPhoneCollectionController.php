@@ -675,4 +675,225 @@ class TblCcPhoneCollectionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Export collection report
+     *
+     * GET /api/cc-phone-collections/export-report?from=2025-11-01&to=2025-11-30
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function exportReport(Request $request): JsonResponse
+    {
+        try {
+            // Validate dates
+            $request->validate([
+                'from' => 'required|date',
+                'to' => 'required|date|after_or_equal:from',
+            ]);
+
+            $fromDate = $request->input('from');
+            $toDate = $request->input('to');
+
+            Log::info('Exporting collection report', [
+                'from_date' => $fromDate,
+                'to_date' => $toDate
+            ]);
+
+            // Query phone collections in date range
+            $phoneCollections = TblCcPhoneCollection::whereRaw(
+                    'DATE("assignedAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
+                    [$fromDate, $toDate]
+                )
+                ->orderBy('assignedAt', 'asc')
+                ->get();
+
+            if ($phoneCollections->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No records found for the specified date range',
+                    'data' => [],
+                    'total' => 0
+                ], 200);
+            }
+
+            Log::info('Phone collections loaded', [
+                'total_records' => $phoneCollections->count()
+            ]);
+
+            // Collect unique user IDs for batch loading
+            $userIds = collect();
+            $phoneCollections->each(function($pc) use ($userIds) {
+                if ($pc->assignedBy) $userIds->push($pc->assignedBy);
+                if ($pc->assignedTo) $userIds->push($pc->assignedTo);
+                if ($pc->lastAttemptBy) $userIds->push($pc->lastAttemptBy);
+            });
+            $userIds = $userIds->unique()->filter()->values()->toArray();
+
+            // Batch load users
+            $users = [];
+            if (!empty($userIds)) {
+                $users = User::whereIn('authUserId', $userIds)
+                    ->get()
+                    ->keyBy('authUserId');
+            }
+
+            // Get phone collection IDs for loading attempts
+            $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
+
+            // Batch load latest attempts
+            $latestAttempts = DB::table('tbl_CcPhoneCollectionDetail as pcd1')
+                ->select('pcd1.*')
+                ->whereIn('pcd1.phoneCollectionId', $phoneCollectionIds)
+                ->whereRaw('pcd1.phoneCollectionDetailId = (
+                    SELECT pcd2.phoneCollectionDetailId
+                    FROM tbl_CcPhoneCollectionDetail pcd2
+                    WHERE pcd2.phoneCollectionId = pcd1.phoneCollectionId
+                    ORDER BY pcd2.dtCallStarted DESC
+                    LIMIT 1
+                )')
+                ->get()
+                ->keyBy('phoneCollectionId');
+
+            // Get unique case result IDs from attempts
+            $caseResultIds = $latestAttempts->pluck('callResultId')->filter()->unique()->values()->toArray();
+
+            // Batch load case results
+            $caseResults = [];
+            if (!empty($caseResultIds)) {
+                $caseResults = DB::table('tbl_CcCaseResult')
+                    ->whereIn('caseResultId', $caseResultIds)
+                    ->get()
+                    ->keyBy('caseResultId');
+            }
+
+            // Transform data
+            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults) {
+                // Get user names
+                $assignedByName = null;
+                if ($pc->assignedBy) {
+                    if ($pc->assignedBy === 1) {
+                        $assignedByName = 'System';
+                    } elseif (isset($users[$pc->assignedBy])) {
+                        $assignedByName = $users[$pc->assignedBy]->userFullName;
+                    }
+                }
+
+                $assignedToName = isset($users[$pc->assignedTo])
+                    ? $users[$pc->assignedTo]->userFullName
+                    : null;
+
+                $lastAttemptByName = isset($users[$pc->lastAttemptBy])
+                    ? $users[$pc->lastAttemptBy]->userFullName
+                    : null;
+
+                // Get latest attempt details
+                $latestAttempt = $latestAttempts->get($pc->phoneCollectionId);
+
+                $attemptData = [
+                    'dtCallStarted' => null,
+                    'dtCallEnded' => null,
+                    'duration' => null,
+                    'callStatus' => null,
+                    'callResultName' => null,
+                    'standardRemarkContent' => null,
+                ];
+
+                if ($latestAttempt) {
+                    $attemptData['dtCallStarted'] = $latestAttempt->dtCallStarted;
+                    $attemptData['dtCallEnded'] = $latestAttempt->dtCallEnded;
+                    $attemptData['callStatus'] = $latestAttempt->callStatus;
+                    $attemptData['standardRemarkContent'] = $latestAttempt->standardRemarkContent;
+
+                    // Calculate duration in seconds
+                    if ($latestAttempt->dtCallStarted && $latestAttempt->dtCallEnded) {
+                        $start = \Carbon\Carbon::parse($latestAttempt->dtCallStarted);
+                        $end = \Carbon\Carbon::parse($latestAttempt->dtCallEnded);
+                        $attemptData['duration'] = $end->diffInSeconds($start);
+                    }
+
+                    // Get case result name
+                    if ($latestAttempt->callResultId && isset($caseResults[$latestAttempt->callResultId])) {
+                        $attemptData['callResultName'] = $caseResults[$latestAttempt->callResultId]->caseResultName;
+                    }
+                }
+
+                return [
+                    'salesAreaName' => $pc->salesAreaName,
+                    'customerId' => $pc->customerId,
+                    'birthDate' => $pc->birthDate?->format('Y-m-d'),
+                    'gender' => $pc->gender,
+                    'contractNo' => $pc->contractNo,
+                    'contractDate' => $pc->contractDate?->format('Y-m-d'),
+                    'contractingProductType' => $pc->contractingProductType,
+                    'productName' => $pc->productName,
+                    'productColor' => $pc->productColor,
+                    'plateNo' => $pc->plateNo,
+                    'unitPrice' => $pc->unitPrice,
+                    'paymentNo' => $pc->paymentNo,
+                    'paymentStatus' => $pc->paymentStatus,
+                    'lastPaymentDate' => $pc->lastPaymentDate?->format('Y-m-d'),
+                    'dueDate' => $pc->dueDate?->format('Y-m-d'),
+                    'paymentAmount' => $pc->paymentAmount,
+                    'penaltyAmount' => $pc->penaltyAmount,
+                    'penaltyExempted' => $pc->penaltyExempted,
+                    'totalAmount' => $pc->totalAmount,
+                    'amountPaid' => $pc->amountPaid,
+                    'amountUnpaid' => $pc->amountUnpaid,
+                    'assignedByName' => $assignedByName,
+                    'assignedToName' => $assignedToName,
+                    'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'lastAttemptBy' => $lastAttemptByName,
+                    'dtCallStarted' => $attemptData['dtCallStarted'],
+                    'dtCallEnded' => $attemptData['dtCallEnded'],
+                    'duration' => $attemptData['duration'],
+                    'callStatus' => $attemptData['callStatus'],
+                    'callResultName' => $attemptData['callResultName'],
+                    'standardRemarkContent' => $attemptData['standardRemarkContent'],
+                    'uncall' => $pc->lastAttemptAt === null,
+                    'reschedule' => $pc->reschedule,
+                    'phoneNo1' => $pc->phoneNo1,
+                    'phoneNo2' => $pc->phoneNo2,
+                    'phoneNo3' => $pc->phoneNo3,
+                    'homeAddress' => $pc->homeAddress,
+                    'totalPenaltyFeesCharged' => $pc->totalPenaltyFeesCharged,
+                    'noOfPenaltyFeesExempted' => $pc->noOfPenaltyFeesExempted,
+                    'noOfPenaltyFeesPaid' => $pc->noOfPenaltyFeesPaid,
+                    'totalPenaltyAmountCharged' => $pc->totalPenaltyAmountCharged,
+                    'source' => 'phone-collection',
+                ];
+            });
+
+            Log::info('Collection report generated successfully', [
+                'total_records' => $reportData->count(),
+                'from_date' => $fromDate,
+                'to_date' => $toDate
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Collection report generated successfully',
+                'data' => $reportData,
+                'total' => $reportData->count(),
+                'date_range' => [
+                    'from' => $fromDate,
+                    'to' => $toDate
+                ]
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to generate collection report', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_params' => $request->all()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate collection report',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
 }

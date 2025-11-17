@@ -245,20 +245,18 @@ class PhoneCollectionSyncService
                     'amountPaid' => $contract['amountPaid'],
                     'amountUnpaid' => $contract['amountUnpaid'],
 
-                    // === Payment status (SKIP due to API bug) ===
-                    'paymentStatus' => null,  // TODO: Add when Maximus fixes bug
+                    // === Payment status (FIXED by Maximus) ===
+                    'paymentStatus' => $contract['paymentStatus'] ?? null,
 
-                    // === Promise to Pay & Penalty (NEW) ===
-                    'latestPtpDate' => $contract['latestPtpDate'] ?? null,
+                    // === Penalty & Reschedule ===
                     'penaltyExempted' => isset($contract['penaltyExempted']) && $contract['penaltyExempted'] == 1,
                     'reschedule' => $contract['reschedule'] ?? null,
 
-                    // === Penalty details (TODO: Request Maximus to add) ===
-                    'totalPenaltyFeesCharged' => null,
-                    'noOfPenaltyFeesExempted' => null,
-                    'noOfPenaltyFeesPaid' => null,
-                    'totalPenaltyAmountCharged' => null,
-                    'noOfAskingPostponePayment' => null,
+                    // === Penalty details (NEW: Added by Maximus) ===
+                    'totalPenaltyFeesCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
+                    'noOfPenaltyFeesExempted' => $contract['noOfPenaltyFeesExempted'] ?? null,
+                    'noOfPenaltyFeesPaid' => $contract['noOfPenaltyFeesPaid'] ?? null,
+                    'totalPenaltyAmountCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
 
                     // === Account & Segment info ===
                     'hasKYCAppAccount' => isset($contract['hasKYCAppAccount']) && $contract['hasKYCAppAccount'] == 1,
