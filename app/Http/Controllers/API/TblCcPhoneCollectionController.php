@@ -857,7 +857,7 @@ class TblCcPhoneCollectionController extends Controller
                     'phoneNo2' => $pc->phoneNo2,
                     'phoneNo3' => $pc->phoneNo3,
                     'homeAddress' => $pc->homeAddress,
-                    'totalPenaltyFeesCharged' => $pc->totalPenaltyFeesCharged,
+                    'noOfPenaltyFeesCharged' => $pc->noOfPenaltyFeesCharged,
                     'noOfPenaltyFeesExempted' => $pc->noOfPenaltyFeesExempted,
                     'noOfPenaltyFeesPaid' => $pc->noOfPenaltyFeesPaid,
                     'totalPenaltyAmountCharged' => $pc->totalPenaltyAmountCharged,

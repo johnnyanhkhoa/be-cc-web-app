@@ -253,7 +253,7 @@ class PhoneCollectionSyncService
                     'reschedule' => $contract['reschedule'] ?? null,
 
                     // === Penalty details (NEW: Added by Maximus) ===
-                    'totalPenaltyFeesCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
+                    'noOfPenaltyFeesCharged' => $contract['noOfPenaltyFeesCharged'] ?? null,
                     'noOfPenaltyFeesExempted' => $contract['noOfPenaltyFeesExempted'] ?? null,
                     'noOfPenaltyFeesPaid' => $contract['noOfPenaltyFeesPaid'] ?? null,
                     'totalPenaltyAmountCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
