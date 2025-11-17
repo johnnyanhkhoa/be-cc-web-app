@@ -60,6 +60,29 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ]);
             }
 
+            if (isset($validatedData['promisedPaymentDate']) || isset($validatedData['dtCallLater'])) {
+                \App\Models\TblCcPromiseHistory::create([
+                    'contractId' => $phoneCollection->contractId,
+                    'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                    'phoneCollectionDetailId' => $phoneCollectionDetail->phoneCollectionDetailId,
+                    'paymentId' => $phoneCollection->paymentId,
+                    'promiseType' => (isset($validatedData['promisedPaymentDate']) && isset($validatedData['dtCallLater']))
+                        ? 'both'
+                        : (isset($validatedData['promisedPaymentDate']) ? 'promised_payment' : 'call_later'),
+                    'promisedPaymentDate' => $validatedData['promisedPaymentDate'] ?? null,
+                    'dtCallLater' => $validatedData['dtCallLater'] ?? null,
+                    'isActive' => true,
+                    'createdAt' => now(),
+                    'createdBy' => $validatedData['createdBy'] ?? null,
+                ]);
+
+                Log::info('Promise history saved', [
+                    'phoneCollectionDetailId' => $phoneCollectionDetail->phoneCollectionDetailId,
+                    'promisedPaymentDate' => $validatedData['promisedPaymentDate'] ?? null,
+                    'dtCallLater' => $validatedData['dtCallLater'] ?? null,
+                ]);
+            }
+
             DB::commit();
 
             // Load relationships for response
