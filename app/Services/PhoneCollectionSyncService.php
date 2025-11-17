@@ -192,93 +192,115 @@ class PhoneCollectionSyncService
             DB::beginTransaction();
 
             $insertData = [];
-            foreach ($contracts as $contract) {
-                // ✅ NEW LOGIC: Map batchId 5,6,7 to parent batch 8
-                $originalBatchId = $batchId;
-                $finalBatchId = in_array($batchId, [5, 6, 7]) ? 8 : $batchId;
+            foreach ($contracts as $index => $contract) {
+                try {
+                    // ✅ Map batchId 5,6,7 to parent batch 8
+                    $originalBatchId = $batchId;
+                    $finalBatchId = in_array($batchId, [5, 6, 7]) ? 8 : $batchId;
 
-                $insertData[] = [
-                    // === Basic contract info ===
-                    'contractId' => $contract['contractId'],
-                    'contractNo' => $contract['contractNo'],
-                    'contractDate' => $contract['contractDate'],
-                    'contractType' => $contract['contractType'],
-                    'contractingProductType' => $contract['contractingProductType'],
+                    $insertData[] = [
+                        // === Basic contract info ===
+                        'contractId' => $contract['contractId'],
+                        'contractNo' => $contract['contractNo'],
+                        'contractDate' => $contract['contractDate'],
+                        'contractType' => $contract['contractType'],
+                        'contractingProductType' => $contract['contractingProductType'],
 
-                    // === Customer info ===
-                    'customerId' => $contract['customerId'],
-                    'customerFullName' => $contract['customerFullName'],
-                    'gender' => $this->mapGender($contract['gender']),
-                    'birthDate' => $contract['birthDate'],
-                    'customerAge' => $contract['customerAge'] ?? null,
+                        // === Customer info ===
+                        'customerId' => $contract['customerId'],
+                        'customerFullName' => $contract['customerFullName'],
+                        'gender' => $this->mapGender($contract['gender']),
+                        'birthDate' => $contract['birthDate'],
+                        'customerAge' => $contract['customerAge'] ?? null,
 
-                    // === Contact info (NEW) ===
-                    'phoneNo1' => $contract['phoneNo1'] ?? null,
-                    'phoneNo2' => $contract['phoneNo2'] ?? null,
-                    'phoneNo3' => $contract['phoneNo3'] ?? null,
-                    'homeAddress' => $contract['homeAddress'] ?? null,
+                        // === Contact info ===
+                        'phoneNo1' => $contract['phoneNo1'] ?? null,
+                        'phoneNo2' => $contract['phoneNo2'] ?? null,
+                        'phoneNo3' => $contract['phoneNo3'] ?? null,
+                        'homeAddress' => $contract['homeAddress'] ?? null,
 
-                    // === Location info (NEW) ===
-                    'contractPlaceId' => $contract['contractPlaceId'] ?? null,
-                    'contractPlaceName' => $contract['contractPlaceName'] ?? null,
-                    'salesAreaId' => $contract['salesAreaId'] ?? null,
-                    'salesAreaName' => $contract['salesAreaName'] ?? null,
+                        // === Location info ===
+                        'contractPlaceId' => $contract['contractPlaceId'] ?? null,
+                        'contractPlaceName' => $contract['contractPlaceName'] ?? null,
+                        'salesAreaId' => $contract['salesAreaId'] ?? null,
+                        'salesAreaName' => $contract['salesAreaName'] ?? null,
 
-                    // === Asset info ===
-                    'assetId' => $contract['assetId'],
-                    'productName' => $contract['productName'] ?? null,      // NEW
-                    'productColor' => $contract['productColor'] ?? null,    // NEW
-                    'plateNo' => $contract['plateNo'] ?? null,              // NEW
-                    'unitPrice' => $contract['unitPrice'] ?? null,          // NEW
+                        // === Asset info ===
+                        'assetId' => $contract['assetId'],
+                        'productName' => $contract['productName'] ?? null,
+                        'productColor' => $contract['productColor'] ?? null,
+                        'plateNo' => $contract['plateNo'] ?? null,
+                        'unitPrice' => $contract['unitPrice'] ?? null,
 
-                    // === Payment info ===
-                    'paymentId' => $contract['paymentId'],
-                    'paymentNo' => $contract['paymentNo'],
-                    'dueDate' => $contract['dueDate'],
-                    'daysOverdueGross' => $contract['daysOverdueGross'],
-                    'daysOverdueNet' => $contract['daysOverdueNet'],
-                    'daysSinceLastPayment' => $contract['daysSinceLastPayment'] ?? null,
-                    'lastPaymentDate' => $contract['lastPaymentDate'] ?? null,
-                    'paymentAmount' => $contract['paymentAmount'],
-                    'penaltyAmount' => $contract['penaltyAmount'],
-                    'totalAmount' => $contract['totalAmount'],
-                    'amountPaid' => $contract['amountPaid'],
-                    'amountUnpaid' => $contract['amountUnpaid'],
+                        // === Payment info ===
+                        'paymentId' => $contract['paymentId'],
+                        'paymentNo' => $contract['paymentNo'],
+                        'dueDate' => $contract['dueDate'],
+                        'daysOverdueGross' => $contract['daysOverdueGross'],
+                        'daysOverdueNet' => $contract['daysOverdueNet'],
+                        'daysSinceLastPayment' => $contract['daysSinceLastPayment'] ?? null,
+                        'lastPaymentDate' => $contract['lastPaymentDate'] ?? null,
+                        'paymentAmount' => $contract['paymentAmount'],
+                        'penaltyAmount' => $contract['penaltyAmount'],
+                        'totalAmount' => $contract['totalAmount'],
+                        'amountPaid' => $contract['amountPaid'],
+                        'amountUnpaid' => $contract['amountUnpaid'],
 
-                    // === Payment status (FIXED by Maximus) ===
-                    'paymentStatus' => $contract['paymentStatus'] ?? null,
+                        // === Payment status ===
+                        'paymentStatus' => $contract['paymentStatus'] ?? null,
 
-                    // === Penalty & Reschedule ===
-                    'penaltyExempted' => isset($contract['penaltyExempted']) && $contract['penaltyExempted'] == 1,
-                    'reschedule' => $contract['reschedule'] ?? null,
+                        // === Penalty & Reschedule ===
+                        'penaltyExempted' => isset($contract['penaltyExempted']) && $contract['penaltyExempted'] == 1,
+                        'reschedule' => $contract['reschedule'] ?? null,
 
-                    // === Penalty details (NEW: Added by Maximus) ===
-                    'noOfPenaltyFeesCharged' => $contract['noOfPenaltyFeesCharged'] ?? null,
-                    'noOfPenaltyFeesExempted' => $contract['noOfPenaltyFeesExempted'] ?? null,
-                    'noOfPenaltyFeesPaid' => $contract['noOfPenaltyFeesPaid'] ?? null,
-                    'totalPenaltyAmountCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
+                        // === Penalty details ===
+                        'noOfPenaltyFeesCharged' => $contract['noOfPenaltyFeesCharged'] ?? null,
+                        'noOfPenaltyFeesExempted' => $contract['noOfPenaltyFeesExempted'] ?? null,
+                        'noOfPenaltyFeesPaid' => $contract['noOfPenaltyFeesPaid'] ?? null,
+                        'totalPenaltyAmountCharged' => $contract['totalPenaltyAmountCharged'] ?? null,
 
-                    // === Account & Segment info ===
-                    'hasKYCAppAccount' => isset($contract['hasKYCAppAccount']) && $contract['hasKYCAppAccount'] == 1,
-                    'segmentType' => $segmentType,
-                    'batchId' => $finalBatchId,        // 5,6,7 → 8; others stay same
-                    'subBatchId' => $originalBatchId,  // Keep original batchId
-                    'riskType' => $contract['preDueRiskSegment'] ?? null,
+                        // === Account & Segment info ===
+                        'hasKYCAppAccount' => isset($contract['hasKYCAppAccount']) && $contract['hasKYCAppAccount'] == 1,
+                        'segmentType' => $segmentType,
+                        'batchId' => $finalBatchId,
+                        'subBatchId' => $originalBatchId,
+                        'riskType' => $contract['preDueRiskSegment'] ?? null,
 
-                    // === Default values ===
-                    'status' => 'pending',
-                    'totalAttempts' => 0,
-                    'createdBy' => 1,
-                    'updatedBy' => 1,
-                    'createdAt' => now(),
-                    'updatedAt' => now(),
-                ];
+                        // === Default values ===
+                        'status' => 'pending',
+                        'totalAttempts' => 0,
+                        'createdBy' => 1,
+                        'updatedBy' => 1,
+                        'createdAt' => now(),
+                        'updatedAt' => now(),
+                    ];
+                } catch (\Exception $e) {
+                    Log::error('Error processing contract', [
+                        'segment_type' => $segmentType,
+                        'batch_id' => $batchId,
+                        'contract_id' => $contract['contractId'] ?? 'unknown',
+                        'error' => $e->getMessage()
+                    ]);
+                    continue;
+                }
             }
 
-            // Bulk insert
-            DB::table('tbl_CcPhoneCollection')->insert($insertData);
-
+            if (empty($insertData)) {
+            Log::info('No new contracts to insert', [
+                'segment_type' => $segmentType,
+                'batch_id' => $batchId
+            ]);
             DB::commit();
+            return 0;
+        }
+
+        // ✅ Bulk insert với chunks (500 records mỗi lần)
+        $chunks = array_chunk($insertData, 500);
+        foreach ($chunks as $chunk) {
+            DB::table('tbl_CcPhoneCollection')->insert($chunk);
+        }
+
+        DB::commit();
 
             Log::info('Phone collections inserted successfully', [
                 'segment_type' => $segmentType,
@@ -292,12 +314,12 @@ class PhoneCollectionSyncService
             DB::rollBack();
             Log::error('Failed to insert phone collections', [
                 'segment_type' => $segmentType,
+                'batch_id' => $batchId,
                 'error' => $e->getMessage()
             ]);
             throw $e;
         }
     }
-
     /**
      * Map gender from API response to database format
      */

@@ -72,6 +72,10 @@ class TblCcPhoneCollection extends Model
         'completedBy',
         'completedAt',
         'hasKYCAppAccount',
+        'noOfPenaltyFeesCharged',      // ← CẦN CÓ
+        'noOfPenaltyFeesExempted',     // ← CẦN CÓ
+        'noOfPenaltyFeesPaid',         // ← CẦN CÓ
+        'totalPenaltyAmountCharged',
     ];
 
     /**
