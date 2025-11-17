@@ -746,11 +746,11 @@ class TblCcPhoneCollectionController extends Controller
             $latestAttempts = DB::table('tbl_CcPhoneCollectionDetail as pcd1')
                 ->select('pcd1.*')
                 ->whereIn('pcd1.phoneCollectionId', $phoneCollectionIds)
-                ->whereRaw('pcd1.phoneCollectionDetailId = (
-                    SELECT pcd2.phoneCollectionDetailId
-                    FROM tbl_CcPhoneCollectionDetail pcd2
-                    WHERE pcd2.phoneCollectionId = pcd1.phoneCollectionId
-                    ORDER BY pcd2.dtCallStarted DESC
+                ->whereRaw('"pcd1"."phoneCollectionDetailId" = (
+                    SELECT "pcd2"."phoneCollectionDetailId"
+                    FROM "tbl_CcPhoneCollectionDetail" "pcd2"
+                    WHERE "pcd2"."phoneCollectionId" = "pcd1"."phoneCollectionId"
+                    ORDER BY "pcd2"."dtCallStarted" DESC
                     LIMIT 1
                 )')
                 ->get()
@@ -768,8 +768,20 @@ class TblCcPhoneCollectionController extends Controller
                     ->keyBy('caseResultId');
             }
 
+            // Get unique reason IDs from attempts
+            $reasonIds = $latestAttempts->pluck('reasonId')->filter()->unique()->values()->toArray();
+
+            // Batch load reasons
+            $reasons = [];
+            if (!empty($reasonIds)) {
+                $reasons = DB::table('tbl_CcReason')
+                    ->whereIn('reasonId', $reasonIds)
+                    ->get()
+                    ->keyBy('reasonId');
+            }
+
             // Transform data
-            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults) {
+            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons) {
                 // Get user names
                 $assignedByName = null;
                 if ($pc->assignedBy) {
@@ -798,6 +810,7 @@ class TblCcPhoneCollectionController extends Controller
                     'callStatus' => null,
                     'callResultName' => null,
                     'standardRemarkContent' => null,
+                    'notPayingReason' => null,
                 ];
 
                 if ($latestAttempt) {
@@ -817,10 +830,16 @@ class TblCcPhoneCollectionController extends Controller
                     if ($latestAttempt->callResultId && isset($caseResults[$latestAttempt->callResultId])) {
                         $attemptData['callResultName'] = $caseResults[$latestAttempt->callResultId]->caseResultName;
                     }
+
+                    // Get reason name (not paying reason)
+                    if ($latestAttempt->reasonId && isset($reasons[$latestAttempt->reasonId])) {
+                        $attemptData['notPayingReason'] = $reasons[$latestAttempt->reasonId]->reasonName;
+                    }
                 }
 
                 return [
                     'salesAreaName' => $pc->salesAreaName,
+                    'branch' => $pc->contractPlaceName,
                     'customerId' => $pc->customerId,
                     'birthDate' => $pc->birthDate?->format('Y-m-d'),
                     'gender' => $pc->gender,
@@ -850,6 +869,7 @@ class TblCcPhoneCollectionController extends Controller
                     'duration' => $attemptData['duration'],
                     'callStatus' => $attemptData['callStatus'],
                     'callResultName' => $attemptData['callResultName'],
+                    'notPayingReason' => $attemptData['notPayingReason'],
                     'standardRemarkContent' => $attemptData['standardRemarkContent'],
                     'uncall' => $pc->lastAttemptAt === null,
                     'reschedule' => $pc->reschedule,
