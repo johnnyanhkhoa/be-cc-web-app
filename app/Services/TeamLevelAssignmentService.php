@@ -206,24 +206,20 @@ class TeamLevelAssignmentService
 
             foreach ($callsByDpd as $dpd => $dpdCalls) {
                 $dpdCount = $dpdCalls->count();
-
-                // Calculate allocation for this DPD group
                 $dpdAllocations = $this->calculateAllocations($dpdCount, $percentages);
 
-                // But limit by remaining quota
                 foreach ($dpdAllocations as $level => $count) {
-                    $actualCount = min($count, $remainingQuota[$level]);
-
                     if (!isset($levelDpdAllocations[$level])) {
                         $levelDpdAllocations[$level] = [];
                     }
 
-                    $levelDpdAllocations[$level][$dpd] = $actualCount;
+                    // ✅ DO NOT apply min() with quota here - allocate proportionally first
+                    $levelDpdAllocations[$level][$dpd] = $count;
                 }
             }
 
-            // Adjust allocations to match total quota exactly
-            $levelDpdAllocations = $this->adjustAllocationsToQuota($levelDpdAllocations, $remainingQuota, $callsByDpd);
+            // ✅ NEW: Scale down proportionally to meet TOTAL quota
+            $levelDpdAllocations = $this->scaleAllocationsToQuota($levelDpdAllocations, $totalAllocations);
 
             Log::info('DPD allocations calculated', [
                 'allocations' => $levelDpdAllocations
@@ -372,26 +368,25 @@ class TeamLevelAssignmentService
             'junior' => 0,
         ];
 
-        // Calculate allocations for each DPD group
+        // ✅ NEW ALGORITHM: Proportional allocation WITHOUT quota limit first
         $levelDpdAllocations = [];
 
         foreach ($callsByDpd as $dpd => $dpdCalls) {
             $dpdCount = $dpdCalls->count();
-
             $dpdAllocations = $this->calculateAllocations($dpdCount, $percentages);
 
             foreach ($dpdAllocations as $level => $count) {
-                $actualCount = min($count, $remainingQuota[$level]);
-
                 if (!isset($levelDpdAllocations[$level])) {
                     $levelDpdAllocations[$level] = [];
                 }
 
-                $levelDpdAllocations[$level][$dpd] = $actualCount;
+                // ✅ DO NOT apply min() with quota here - allocate proportionally first
+                $levelDpdAllocations[$level][$dpd] = $count;
             }
         }
 
-        $levelDpdAllocations = $this->adjustAllocationsToQuota($levelDpdAllocations, $remainingQuota, $callsByDpd);
+        // ✅ NEW: Scale down proportionally to meet TOTAL quota
+        $levelDpdAllocations = $this->scaleAllocationsToQuota($levelDpdAllocations, $totalAllocations);
 
         // ✅ Create a copy of callsByDpd to avoid modifying original
         $callsByDpdCopy = collect();
@@ -484,78 +479,6 @@ class TeamLevelAssignmentService
     }
 
     /**
-     * Adjust allocations to match quota exactly
-     *
-     * @param array $levelDpdAllocations
-     * @param array $targetQuota
-     * @param \Illuminate\Support\Collection $callsByDpd
-     * @return array
-     */
-    private function adjustAllocationsToQuota(array $levelDpdAllocations, array $targetQuota, $callsByDpd): array
-    {
-        // Calculate current total for each level
-        $currentTotals = [];
-        foreach ($levelDpdAllocations as $level => $dpdCounts) {
-            $currentTotals[$level] = array_sum($dpdCounts);
-        }
-
-        // Adjust if needed
-        foreach ($currentTotals as $level => $currentTotal) {
-            $diff = $targetQuota[$level] - $currentTotal;
-
-            if ($diff == 0) {
-                continue;
-            }
-
-            // Need to add or remove calls
-            if ($diff > 0) {
-                // Need to add calls - find DPD groups with available calls
-                foreach ($callsByDpd as $dpd => $dpdCalls) {
-                    if ($diff <= 0) break;
-
-                    $currentAllocation = $levelDpdAllocations[$level][$dpd] ?? 0;
-                    $available = $dpdCalls->count();
-
-                    // Calculate how much is already allocated to other levels for this DPD
-                    $allocatedToOthers = 0;
-                    foreach ($levelDpdAllocations as $otherLevel => $otherDpdCounts) {
-                        if ($otherLevel !== $level) {
-                            $allocatedToOthers += $otherDpdCounts[$dpd] ?? 0;
-                        }
-                    }
-
-                    $canTake = $available - $currentAllocation - $allocatedToOthers;
-                    $toAdd = min($diff, $canTake);
-
-                    if ($toAdd > 0) {
-                        $levelDpdAllocations[$level][$dpd] = $currentAllocation + $toAdd;
-                        $diff -= $toAdd;
-                    }
-                }
-            } else {
-                // Need to remove calls - remove from largest DPD groups first
-                $diff = abs($diff);
-                $dpdSorted = collect($levelDpdAllocations[$level])
-                    ->sortDesc()
-                    ->keys()
-                    ->toArray();
-
-                foreach ($dpdSorted as $dpd) {
-                    if ($diff <= 0) break;
-
-                    $currentAllocation = $levelDpdAllocations[$level][$dpd];
-                    $toRemove = min($diff, $currentAllocation);
-
-                    $levelDpdAllocations[$level][$dpd] -= $toRemove;
-                    $diff -= $toRemove;
-                }
-            }
-        }
-
-        return $levelDpdAllocations;
-    }
-
-    /**
      * Calculate how many calls each level should get
      *
      * @param int $totalCalls
@@ -582,6 +505,71 @@ class TeamLevelAssignmentService
         }
 
         return $allocations;
+    }
+
+    /**
+     * Scale allocations proportionally to meet total quota
+     * Ensures EVERY level gets calls from EVERY DPD group
+     *
+     * @param array $levelDpdAllocations
+     * @param array $targetQuota
+     * @return array
+     */
+    private function scaleAllocationsToQuota(array $levelDpdAllocations, array $targetQuota): array
+    {
+        foreach ($levelDpdAllocations as $level => $dpdCounts) {
+            $currentTotal = array_sum($dpdCounts);
+            $quota = $targetQuota[$level];
+
+            if ($currentTotal == 0 || $quota == 0) {
+                continue;
+            }
+
+            // Calculate scaling factor
+            $scaleFactor = $quota / $currentTotal;
+
+            Log::info('Scaling allocations for level', [
+                'level' => $level,
+                'current_total' => $currentTotal,
+                'target_quota' => $quota,
+                'scale_factor' => $scaleFactor
+            ]);
+
+            // Scale each DPD allocation proportionally
+            $scaledTotal = 0;
+            $scaledAllocations = [];
+
+            foreach ($dpdCounts as $dpd => $count) {
+                $scaled = (int) round($count * $scaleFactor);
+                $scaledAllocations[$dpd] = $scaled;
+                $scaledTotal += $scaled;
+            }
+
+            // Fix rounding errors - adjust the largest DPD group
+            $diff = $quota - $scaledTotal;
+            if ($diff != 0) {
+                // Find DPD with most calls
+                arsort($scaledAllocations);
+                $largestDpd = array_key_first($scaledAllocations);
+                $scaledAllocations[$largestDpd] += $diff;
+
+                // Ensure non-negative
+                if ($scaledAllocations[$largestDpd] < 0) {
+                    $scaledAllocations[$largestDpd] = 0;
+                }
+            }
+
+            $levelDpdAllocations[$level] = $scaledAllocations;
+
+            Log::info('Scaled allocations for level', [
+                'level' => $level,
+                'final_total' => array_sum($scaledAllocations),
+                'target_quota' => $quota,
+                'diff' => array_sum($scaledAllocations) - $quota
+            ]);
+        }
+
+        return $levelDpdAllocations;
     }
 
     /**
