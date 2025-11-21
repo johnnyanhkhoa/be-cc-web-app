@@ -795,6 +795,82 @@ class TblCcPhoneCollectionController extends Controller
                     ->keyBy('reasonId');
             }
 
+            // Get unique batch IDs from phone collections
+            $batchIds = $phoneCollections->pluck('batchId')->filter()->unique()->values()->toArray();
+
+            // Batch load batches
+            $batches = [];
+            if (!empty($batchIds)) {
+                $batches = DB::table('tbl_CcBatch')
+                    ->whereIn('batchId', $batchIds)
+                    ->get()
+                    ->keyBy('batchId');
+            }
+
+            // Batch load user levels (need both assignedTo and batchId)
+            // First, create a map of authUserId -> userId (local ID)
+            $authUserIds = $phoneCollections
+                ->pluck('assignedTo')
+                ->filter()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $authToLocalUserIdMap = [];
+            if (!empty($authUserIds)) {
+                $localUsers = User::whereIn('authUserId', $authUserIds)
+                    ->get(['id', 'authUserId']);
+
+                foreach ($localUsers as $user) {
+                    $authToLocalUserIdMap[$user->authUserId] = $user->id;
+                }
+            }
+
+            // Create array of [userId (local), batchId] pairs
+            $userLevelPairs = $phoneCollections
+                ->filter(function($pc) use ($authToLocalUserIdMap) {
+                    return $pc->assignedTo !== null
+                        && $pc->batchId !== null
+                        && isset($authToLocalUserIdMap[$pc->assignedTo]);
+                })
+                ->map(function($pc) use ($authToLocalUserIdMap) {
+                    return [
+                        'userId' => $authToLocalUserIdMap[$pc->assignedTo],
+                        'authUserId' => $pc->assignedTo,
+                        'batchId' => $pc->batchId
+                    ];
+                })
+                ->unique(function($pair) {
+                    return $pair['userId'] . '_' . $pair['batchId'];
+                })
+                ->values();
+
+            // Load user levels using userId (local ID)
+            $userLevels = [];
+            if ($userLevelPairs->isNotEmpty()) {
+                $userLevelsRaw = DB::table('tbl_CcUserLevel')
+                    ->whereIn('userId', $userLevelPairs->pluck('userId')->unique()->toArray())
+                    ->whereIn('batchId', $userLevelPairs->pluck('batchId')->unique()->toArray())
+                    ->get();
+
+                // Create a map: userId_batchId -> level
+                $userLevelsByUserIdBatchId = [];
+                foreach ($userLevelsRaw as $userLevel) {
+                    $key = $userLevel->userId . '_' . $userLevel->batchId;
+                    $userLevelsByUserIdBatchId[$key] = $userLevel;
+                }
+
+                // Convert to authUserId_batchId for easy lookup in map function
+                foreach ($userLevelPairs as $pair) {
+                    $userIdKey = $pair['userId'] . '_' . $pair['batchId'];
+                    $authUserIdKey = $pair['authUserId'] . '_' . $pair['batchId'];
+
+                    if (isset($userLevelsByUserIdBatchId[$userIdKey])) {
+                        $userLevels[$authUserIdKey] = $userLevelsByUserIdBatchId[$userIdKey];
+                    }
+                }
+            }
+
             // ============================================================
             // Count askingPostponePayment per contractId (FULL HISTORY)
             // ============================================================
@@ -824,7 +900,7 @@ class TblCcPhoneCollectionController extends Controller
             // ============================================================
 
             // Transform data
-            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons, $postponeCountByContract) {
+            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons, $postponeCountByContract, $batches, $userLevels) {
                 // Get user names
                 $assignedByName = null;
                 if ($pc->assignedBy) {
@@ -880,6 +956,21 @@ class TblCcPhoneCollectionController extends Controller
                     }
                 }
 
+                // Get batch name (MOVED OUTSIDE if block)
+                $batchName = null;
+                if ($pc->batchId && isset($batches[$pc->batchId])) {
+                    $batchName = $batches[$pc->batchId]->batchName;
+                }
+
+                // Get user level (MOVED OUTSIDE if block)
+                $userLevel = null;
+                if ($pc->assignedTo && $pc->batchId) {
+                    $userLevelKey = $pc->assignedTo . '_' . $pc->batchId;
+                    if (isset($userLevels[$userLevelKey])) {
+                        $userLevel = $userLevels[$userLevelKey]->level;
+                    }
+                }
+
                 return [
                     'salesAreaName' => $pc->salesAreaName,
                     'branch' => $pc->contractPlaceName,
@@ -903,8 +994,11 @@ class TblCcPhoneCollectionController extends Controller
                     'totalAmount' => $pc->totalAmount,
                     'amountPaid' => $pc->amountPaid,
                     'amountUnpaid' => $pc->amountUnpaid,
+                    'batchName' => $batchName,              // ← THÊM MỚI
+                    'DPD' => $pc->daysOverdueGross,
                     'assignedByName' => $assignedByName,
                     'assignedToName' => $assignedToName,
+                    'userLevel' => $userLevel,
                     'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'lastAttemptBy' => $lastAttemptByName,
                     'dtCallStarted' => $attemptData['dtCallStarted'],
