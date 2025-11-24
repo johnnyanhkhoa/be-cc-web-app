@@ -21,20 +21,20 @@ return [
 
         'rabbitmq' => [
             'driver' => 'rabbitmq',
-            'connection' => AMQPLazyConnection::class,
+            'connection' => PhpAmqpLib\Connection\AMQPStreamConnection::class,
             'hosts' => [
                 [
-                    'host'      => env('RABBITMQ_HOST', '127.0.0.1'),
-                    'port'      => env('RABBITMQ_PORT', 5672),
-                    'user'      => env('RABBITMQ_USER', 'guest'),
-                    'password'  => env('RABBITMQ_PASSWORD', 'guest'),
-                    'vhost'     => env('RABBITMQ_VHOST', '/'),
+                    'host'      => env('RABBITMQ_EXPORT_HOST', '127.0.0.1'),
+                    'port'      => env('RABBITMQ_EXPORT_PORT', 5672),
+                    'user'      => env('RABBITMQ_EXPORT_USER', 'guest'),
+                    'password'  => env('RABBITMQ_EXPORT_PASSWORD', 'guest'),
+                    'vhost'     => env('RABBITMQ_EXPORT_VHOST', '/'),
                 ],
             ],
-            'queue' => env('RABBITMQ_QUEUE_LOGIN', 'user_login_tracking'),
+            'queue' => env('RABBITMQ_EXPORT_QUEUE', 'cc_module'),
             'options' => [
                 'exchange' => [
-                    'name'        => env('RABBITMQ_EXCHANGE_NAME', 'user_tracking_exchange'),
+                    'name'        => env('RABBITMQ_EXPORT_EXCHANGE_NAME', 'cc_exchange'),
                     'type'        => 'direct',
                     'declare'     => true,
                     'passive'     => false,
@@ -42,9 +42,13 @@ return [
                     'auto_delete' => false,
                 ],
                 'queue' => [
-                    'job' => VladimirYuldashev\LaravelQueueRabbitMQ\Queue\Jobs\RabbitMQJob::class
+                    'job' => VladimirYuldashev\LaravelQueueRabbitMQ\Queue\Jobs\RabbitMQJob::class,
                 ],
+                'heartbeat' => 120,
+                'read_write_timeout' => 300,
             ],
+            'retry_after' => 90,
+            'timeout'     => 60,
         ],
 
         'redis' => [

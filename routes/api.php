@@ -338,6 +338,9 @@ Route::get('/cc-phone-collections/export-report', [
     'exportReport'
 ]);
 
+// Export Test Route
+Route::post('/export/test', [App\Http\Controllers\API\ExportController::class, 'testExport']);
+
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {
 //     Route::prefix('auth')->group(function () {
