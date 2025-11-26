@@ -96,6 +96,7 @@ class TeamLevelConfigController extends Controller
                 'seniorPercentage' => 'required|numeric|min:0|max:100',
                 'midLevelPercentage' => 'required|numeric|min:0|max:100',
                 'juniorPercentage' => 'required|numeric|min:0|max:100',
+                'newJoinerPercentage' => 'required|numeric|min:0|max:100',
                 'remarks' => 'nullable|string',
                 'createdBy' => 'required|integer|exists:users,authUserId',
             ]);
@@ -110,7 +111,8 @@ class TeamLevelConfigController extends Controller
 
             // Check total percentage = 100
             $total = $request->teamLeaderPercentage + $request->seniorPercentage +
-                     $request->midLevelPercentage + $request->juniorPercentage;
+                $request->midLevelPercentage + $request->juniorPercentage +
+                $request->newJoinerPercentage;  // ← THÊM MỚI
 
             if (abs($total - 100) > 0.01) {
                 return response()->json([
@@ -152,12 +154,14 @@ class TeamLevelConfigController extends Controller
                 'seniorCount' => $suggestedConfig->seniorCount,
                 'midLevelCount' => $suggestedConfig->midLevelCount,
                 'juniorCount' => $suggestedConfig->juniorCount,
+                'newJoinerCount' => $suggestedConfig->newJoinerCount,
                 'totalAgents' => $suggestedConfig->totalAgents,
                 'totalCalls' => $suggestedConfig->totalCalls,
                 'teamLeaderPercentage' => $request->teamLeaderPercentage,
                 'seniorPercentage' => $request->seniorPercentage,
                 'midLevelPercentage' => $request->midLevelPercentage,
                 'juniorPercentage' => $request->juniorPercentage,
+                'newJoinerPercentage' => $request->newJoinerPercentage,
                 'configType' => TblCcTeamLevelConfig::TYPE_APPROVED,
                 'isActive' => true,
                 'isAssigned' => false,
@@ -453,6 +457,7 @@ class TeamLevelConfigController extends Controller
                 'senior' => $config->seniorCount,
                 'midLevel' => $config->midLevelCount,
                 'junior' => $config->juniorCount,
+                'newJoiner' => $config->newJoinerCount,
                 'total' => $config->totalAgents,
             ],
             'totalCalls' => $config->totalCalls,
@@ -461,6 +466,7 @@ class TeamLevelConfigController extends Controller
                 'senior' => (float) $config->seniorPercentage,
                 'midLevel' => (float) $config->midLevelPercentage,
                 'junior' => (float) $config->juniorPercentage,
+                'newJoiner' => (float) $config->newJoinerPercentage,
             ],
             'agentsByLevel' => $usersByLevel,
             'assignmentsByUser' => $config->assignmentsByUser,
@@ -517,6 +523,7 @@ class TeamLevelConfigController extends Controller
                 'senior' => [],
                 'midLevel' => [],
                 'junior' => [],
+                'newJoiner' => [],
             ];
         }
 
@@ -540,6 +547,7 @@ class TeamLevelConfigController extends Controller
             'senior' => [],
             'midLevel' => [],
             'junior' => [],
+            'newJoiner' => [],
         ];
 
         foreach ($userLevels as $userLevel) {
@@ -570,6 +578,9 @@ class TeamLevelConfigController extends Controller
                     break;
                 case 'junior':
                     $grouped['junior'][] = $userData;
+                    break;
+                case 'new-joiner':
+                    $grouped['newJoiner'][] = $userData;
                     break;
             }
         }

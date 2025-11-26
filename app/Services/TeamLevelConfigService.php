@@ -17,10 +17,11 @@ class TeamLevelConfigService
      * team-leader : senior : mid-level : junior = 24:37:22:17
      */
     const BASE_RATIO = [
-        'team-leader' => 24,
-        'senior' => 37,
-        'mid-level' => 22,
-        'junior' => 17,
+        'team-leader' => 22,
+        'senior' => 34,
+        'mid-level' => 19,
+        'junior' => 15,
+        'new-joiner' => 10,
     ];
 
     /**
@@ -90,6 +91,7 @@ class TeamLevelConfigService
                 'senior' => 0,
                 'mid-level' => 0,
                 'junior' => 0,
+                'new-joiner' => 0,
             ];
 
             foreach ($dutyRosters as $roster) {
@@ -135,12 +137,14 @@ class TeamLevelConfigService
                 'seniorCount' => $counts['senior'],
                 'midLevelCount' => $counts['mid-level'],
                 'juniorCount' => $counts['junior'],
+                'newJoinerCount' => $counts['new-joiner'],
                 'totalAgents' => $totalAgents,
                 'totalCalls' => $unassignedCalls,  // ← THÊM
                 'teamLeaderPercentage' => $percentages['team-leader'],
                 'seniorPercentage' => $percentages['senior'],
                 'midLevelPercentage' => $percentages['mid-level'],
                 'juniorPercentage' => $percentages['junior'],
+                'newJoinerPercentage' => $percentages['new-joiner'],
                 'configType' => TblCcTeamLevelConfig::TYPE_SUGGESTED,
                 'isActive' => true,
                 'isAssigned' => false,
@@ -351,6 +355,7 @@ class TeamLevelConfigService
             'senior' => 0,
             'mid-level' => 0,
             'junior' => 0,
+            'new-joiner' => 0,
         ];
 
         foreach ($dutyRosters as $roster) {
@@ -366,6 +371,7 @@ class TeamLevelConfigService
             'senior' => $existingConfig->seniorCount,
             'mid-level' => $existingConfig->midLevelCount,
             'junior' => $existingConfig->juniorCount,
+            'new-joiner' => $existingConfig->newJoinerCount,
         ];
 
         // Check if counts changed

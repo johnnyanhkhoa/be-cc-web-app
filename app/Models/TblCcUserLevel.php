@@ -37,6 +37,7 @@ class TblCcUserLevel extends Model
     const LEVEL_SENIOR = 'senior';
     const LEVEL_MID_LEVEL = 'mid-level';
     const LEVEL_JUNIOR = 'junior';
+    const LEVEL_NEW_JOINER = 'new-joiner';
 
     /**
      * Relationship: User

@@ -134,6 +134,7 @@ class TeamLevelAssignmentService
             'senior' => [],
             'mid-level' => [],
             'junior' => [],
+            'new-joiner' => [],
         ];
 
         foreach ($dutyRosters as $roster) {
@@ -181,6 +182,7 @@ class TeamLevelAssignmentService
             'senior' => $config->seniorPercentage,
             'mid-level' => $config->midLevelPercentage,
             'junior' => $config->juniorPercentage,
+            'new-joiner' => $config->newJoinerPercentage,
         ];
 
         DB::beginTransaction();
@@ -231,6 +233,7 @@ class TeamLevelAssignmentService
                 'senior' => 0,
                 'mid-level' => 0,
                 'junior' => 0,
+                'new-joiner' => 0,
             ];
 
             // Step 3: Assign calls based on calculated allocations
@@ -349,6 +352,7 @@ class TeamLevelAssignmentService
             'senior' => $config->seniorPercentage,
             'mid-level' => $config->midLevelPercentage,
             'junior' => $config->juniorPercentage,
+            'new-joiner' => $config->newJoinerPercentage,
         ];
 
         // Calculate TOTAL allocation for each level
@@ -366,6 +370,7 @@ class TeamLevelAssignmentService
             'senior' => 0,
             'mid-level' => 0,
             'junior' => 0,
+            'new-joiner' => 0,
         ];
 
         // ✅ NEW ALGORITHM: Proportional allocation WITHOUT quota limit first
@@ -585,6 +590,7 @@ class TeamLevelAssignmentService
             'senior' => 0,
             'mid-level' => 0,
             'junior' => 0,
+            'new-joiner' => 0,
         ];
 
         foreach ($assignments as $assignment) {
@@ -769,6 +775,7 @@ class TeamLevelAssignmentService
                         'senior' => (float) $config->seniorPercentage,
                         'midLevel' => (float) $config->midLevelPercentage,
                         'junior' => (float) $config->juniorPercentage,
+                        'newJoiner' => (float) $config->newJoinerPercentage,
                     ],
                 ],
                 'total_assigned' => $previewData['total_assigned'],
