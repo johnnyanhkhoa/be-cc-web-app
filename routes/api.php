@@ -338,6 +338,12 @@ Route::get('/cc-phone-collections/export-report', [
     'exportReport'
 ]);
 
+// Analytics
+Route::get('/cc-phone-collections/analytics-summary', [
+    App\Http\Controllers\API\AnalyticsController::class,
+    'getAnalyticsSummary'
+]);
+
 // Export Test Route
 Route::post('/export/test', [App\Http\Controllers\API\ExportController::class, 'testExport']);
 
