@@ -9,7 +9,8 @@ use Exception;
 
 class RescheduleService
 {
-    private const BASE_URL = 'https://maximus-staging.vnapp.xyz/api/v1/cc';
+    // private const BASE_URL = 'https://maximus-staging.vnapp.xyz/api/v1/cc';
+    private const BASE_URL = 'https://maximus.vnapp.xyz/api/v1/cc';
     private const API_KEY = 't03JN3y8L12gzVbuLuorjwBAHgVAkkY6QOvJkP6m';
 
     /**

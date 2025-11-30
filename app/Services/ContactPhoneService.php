@@ -18,7 +18,8 @@ class ContactPhoneService
     public function getPhones(int $customerId): array
     {
         try {
-            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
+            // $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
+            $url = "https://maximus.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
 
             Log::info('Getting customer phones', [
                 'url' => $url,
@@ -69,7 +70,8 @@ class ContactPhoneService
     public function createPhone(int $customerId, array $phoneData): array
     {
         try {
-            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
+            // $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
+            $url = "https://maximus.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones";
 
             Log::info('Creating customer phone', [
                 'url' => $url,
@@ -122,7 +124,8 @@ class ContactPhoneService
     public function updatePhone(int $customerId, int $phoneId, array $phoneData): array
     {
         try {
-            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
+            // $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
+            $url = "https://maximus.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
 
             Log::info('Updating customer phone', [
                 'url' => $url,
@@ -177,7 +180,8 @@ class ContactPhoneService
     public function deletePhone(int $customerId, int $phoneId, array $deleteData): array
     {
         try {
-            $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
+            // $url = "https://maximus-staging.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
+            $url = "https://maximus.vnapp.xyz/api/v1/cc/customers/{$customerId}/phones/{$phoneId}";
 
             Log::info('Deleting customer phone', [
                 'url' => $url,
