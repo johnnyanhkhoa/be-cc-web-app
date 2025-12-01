@@ -366,7 +366,7 @@ class TblCcPhoneCollectionController extends Controller
                     'amountUnpaid' => $pc->amountUnpaid,
                     'batchId' => $pc->batchId,
                     'batchCode' => $pc->batch?->code,
-                    'batchName' => $pc->batch?->batchName,           // ← ĐỔI: batchCode → batchName
+                    'batchName' => $pc->subBatch?->batchName ?? $pc->batch?->batchName,           // ← ĐỔI: batchCode → batchName
                     'subBatchId' => $pc->subBatchId,                  // ← THÊM: subBatchId
                     'subBatchName' => $pc->subBatch?->batchName,
                     'createdAt' => $pc->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
