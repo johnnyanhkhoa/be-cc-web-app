@@ -274,7 +274,7 @@ class PhoneCollectionSyncService
                         'lastPaymentDate' => $contract['lastPaymentDate'] ?? null,
                         'paymentAmount' => $contract['paymentAmount'],
                         'penaltyAmount' => $contract['penaltyAmount'],
-                        'totalAmount' => $contract['totalAmount'],
+                        'totalAmount' => $contract['totalAmount'] ?? $contract['totalOvdAmount'] ?? null,
                         'amountPaid' => $contract['amountPaid'],
                         'amountUnpaid' => $contract['amountUnpaid'],
 
