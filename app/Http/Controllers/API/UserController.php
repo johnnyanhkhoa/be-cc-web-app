@@ -308,7 +308,7 @@ class UserController extends Controller
         try {
             $request->validate([
                 'batchId' => 'required|integer|min:1',
-                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior,new-joiner',
                 'hasLevel' => 'nullable|in:true,false,1,0',  // Filter by có/chưa có level
                 'isActive' => 'nullable|in:true,false,1,0',  // Filter by user active status
             ]);
@@ -438,7 +438,7 @@ class UserController extends Controller
         try {
             $request->validate([
                 'batchId' => 'nullable|integer|min:1',
-                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior',
+                'level' => 'nullable|string|in:team-leader,senior,mid-level,junior,new-joiner',
                 'levelIsActive' => 'nullable|in:true,false,1,0',
                 'isActive' => 'nullable|in:true,false,1,0',
                 'search' => 'nullable|string',
@@ -589,7 +589,7 @@ class UserController extends Controller
         try {
             $request->validate([
                 'batchId' => 'required|integer|min:1',
-                'level' => 'required|string|in:team-leader,senior,mid-level,junior',
+                'level' => 'required|string|in:team-leader,senior,mid-level,junior,new-joiner',
                 'updatedBy' => 'required|integer|exists:users,authUserId',
             ]);
 
@@ -672,7 +672,7 @@ class UserController extends Controller
                 'batchId' => 'required|integer|min:1',
                 'updates' => 'required|array|min:1',
                 'updates.*.userId' => 'required|integer|exists:users,id',
-                'updates.*.level' => 'required|string|in:team-leader,senior,mid-level,junior',
+                'updates.*.level' => 'required|string|in:team-leader,senior,mid-level,junior,new-joiner',
                 'updatedBy' => 'required|integer|exists:users,authUserId',
             ]);
 
