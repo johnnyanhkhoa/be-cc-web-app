@@ -54,6 +54,33 @@ class PenaltyFeeService
 
             $data = $response->json();
 
+            // Step 3: Transform personExempted logic
+            if (isset($data['data']['payment'])) {
+                $payment = &$data['data']['payment'];
+
+                $userExempted = $payment['userExempted'] ?? null;
+                $personExemptedObj = $payment['person_exempted'] ?? null;
+
+                // Check if need to replace with local user
+                if ($userExempted !== null &&
+                    $personExemptedObj &&
+                    ($personExemptedObj['userFullName'] ?? '') === 'CC System') {
+
+                    // Find local user by username
+                    $localUser = \App\Models\User::where('username', $userExempted)->first();
+
+                    if ($localUser) {
+                        $payment['personExempted'] = $localUser->userFullName;
+                    } else {
+                        $payment['personExempted'] = $userExempted; // fallback to username
+                    }
+                }
+                // If userExempted is NULL, use person_exempted.userFullName
+                elseif ($userExempted === null && $personExemptedObj) {
+                    $payment['personExempted'] = $personExemptedObj['userFullName'];
+                }
+            }
+
             Log::info('Penalty fee info retrieved', [
                 'phone_collection_id' => $phoneCollectionId,
                 'payment_id' => $paymentId,
