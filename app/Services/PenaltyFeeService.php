@@ -85,7 +85,7 @@ class PenaltyFeeService
      * @return array
      * @throws Exception
      */
-    public function exemptPenaltyFee(int $phoneCollectionId, string $reasonExempted): array
+    public function exemptPenaltyFee(int $phoneCollectionId, string $reasonExempted, string $userExempted): array
     {
         try {
             // Step 1: Get paymentId from tbl_CcPhoneCollection
@@ -105,6 +105,7 @@ class PenaltyFeeService
                 'phone_collection_id' => $phoneCollectionId,
                 'payment_id' => $paymentId,
                 'reason' => $reasonExempted,
+                'user' => $userExempted,
             ]);
 
             // Step 2: Call external API
@@ -118,6 +119,7 @@ class PenaltyFeeService
                 ])
                 ->post($url, [
                     'reasonExempted' => $reasonExempted,
+                    'userExempted' => $userExempted,
                 ]);
 
             $data = $response->json();

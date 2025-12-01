@@ -67,13 +67,19 @@ class PenaltyFeeController extends Controller
     {
         try {
             $reasonExempted = $request->validated()['reasonExempted'];
+            $userExempted = $request->validated()['userExempted'];
 
             Log::info('Exempt penalty fee request', [
                 'phone_collection_id' => $phoneCollectionId,
                 'reason' => $reasonExempted,
+                'user' => $userExempted,
             ]);
 
-            $result = $this->penaltyFeeService->exemptPenaltyFee($phoneCollectionId, $reasonExempted);
+            $result = $this->penaltyFeeService->exemptPenaltyFee(
+                $phoneCollectionId,
+                $reasonExempted,
+                $userExempted
+            );
 
             // Return exact response from external API
             return response()->json($result['data'], $result['status_code']);
