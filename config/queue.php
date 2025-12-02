@@ -51,6 +51,39 @@ return [
             'timeout'     => 60,
         ],
 
+        // ← THÊM CONNECTION MỚI CHO ASTERISK LOG
+        'rabbitmq_asterisk' => [
+            'driver' => 'rabbitmq',
+            'connection' => PhpAmqpLib\Connection\AMQPStreamConnection::class,
+            'hosts' => [
+                [
+                    'host'      => env('RABBITMQ_ASTERISK_HOST', '127.0.0.1'),
+                    'port'      => env('RABBITMQ_ASTERISK_PORT', 5672),
+                    'user'      => env('RABBITMQ_ASTERISK_USER', 'guest'),
+                    'password'  => env('RABBITMQ_ASTERISK_PASSWORD', 'guest'),
+                    'vhost'     => env('RABBITMQ_ASTERISK_VHOST', '/'),
+                ],
+            ],
+            'queue' => env('RABBITMQ_ASTERISK_QUEUE', 'asterisk_log'),
+            'options' => [
+                'exchange' => [
+                    'name'        => env('RABBITMQ_ASTERISK_EXCHANGE', 'asterisk_exchange'),
+                    'type'        => 'direct',
+                    'declare'     => true,
+                    'passive'     => false,
+                    'durable'     => true,
+                    'auto_delete' => false,
+                ],
+                'queue' => [
+                    'job' => VladimirYuldashev\LaravelQueueRabbitMQ\Queue\Jobs\RabbitMQJob::class,
+                ],
+                'heartbeat' => 120,
+                'read_write_timeout' => 300,
+            ],
+            'retry_after' => 90,
+            'timeout'     => 60,
+        ],
+
         'redis' => [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
