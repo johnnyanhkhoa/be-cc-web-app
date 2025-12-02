@@ -56,7 +56,6 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Re-throw để job vào failed queue
             throw $e;
         }
     }
@@ -64,7 +63,7 @@ class SendAsteriskLogToCCJob implements ShouldQueue
     protected function saveToDatabase(array $data): void
     {
         try {
-            // Parse calledAt if it's a Carbon object
+            // Parse dates
             $calledAt = null;
             if (isset($data['called_at'])) {
                 if ($data['called_at'] instanceof Carbon) {
@@ -74,33 +73,67 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                 }
             }
 
-            // Parse callDate
             $callDate = isset($data['call_date']) ? Carbon::parse($data['call_date']) : null;
 
-            DB::table('tbl_CcAsteriskCallLog')->insert([
-                'caseId' => $data['case_id'] ?? null,
-                'phoneNo' => $data['phone_to'] ?? null,
-                'phoneExtension' => $data['extension_no'] ?? null,
-                'username' => $data['username'] ?? null,
-                'apiCallId' => $data['api_call_id'] ?? null,
-                'callDate' => $callDate,
-                'calledAt' => $calledAt,
-                'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
-                'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
-                'callStatus' => $data['status'] ?? null,
-                'recordFile' => $data['record_file'] ?? null,
-                'asteriskCallId' => $data['asterisk_call_id'] ?? null,
-                'rawContent' => $data['raw_content'] ?? null,
-                'company' => $data['company'] ?? null,
-                'outboundCnum' => $data['outbound_cnum'] ?? null,
-                'createdAt' => now(),
-                'updatedAt' => now(),
-            ]);
+            // ✅ TÌM record đã tạo khi INITIATE (match bằng caseId + phoneNo + createdAt gần nhất)
+            $existingLog = DB::table('tbl_CcAsteriskCallLog')
+                ->where('caseId', $data['case_id'])
+                ->where('phoneNo', $data['phone_to'])
+                ->whereNull('apiCallId') // Chỉ lấy record chưa có apiCallId
+                ->orderBy('createdAt', 'desc')
+                ->first();
 
-            Log::info('Asterisk call log saved successfully', [
-                'case_id' => $data['case_id'] ?? null,
-                'asterisk_call_id' => $data['asterisk_call_id'] ?? null,
-            ]);
+            if ($existingLog) {
+                // ✅ UPDATE record đã có
+                DB::table('tbl_CcAsteriskCallLog')
+                    ->where('id', $existingLog->id)
+                    ->update([
+                        'apiCallId' => $data['api_call_id'] ?? null,
+                        'callDate' => $callDate,
+                        'calledAt' => $calledAt,
+                        'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
+                        'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
+                        'callStatus' => $data['status'] ?? null,
+                        'recordFile' => $data['record_file'] ?? null,
+                        'asteriskCallId' => $data['asterisk_call_id'] ?? null,
+                        'rawContent' => $data['raw_content'] ?? null,
+                        'company' => $data['company'] ?? null,
+                        'outboundCnum' => $data['outbound_cnum'] ?? null,
+                        'updatedAt' => now(),
+                    ]);
+
+                Log::info('Asterisk call log UPDATED successfully', [
+                    'id' => $existingLog->id,
+                    'case_id' => $data['case_id'],
+                    'asterisk_call_id' => $data['asterisk_call_id'],
+                ]);
+            } else {
+                // ✅ INSERT nếu không tìm thấy (fallback - trường hợp không initiate trước)
+                DB::table('tbl_CcAsteriskCallLog')->insert([
+                    'caseId' => $data['case_id'] ?? null,
+                    'phoneNo' => $data['phone_to'] ?? null,
+                    'phoneExtension' => $data['extension_no'] ?? null,
+                    'username' => $data['username'] ?? null,
+                    'apiCallId' => $data['api_call_id'] ?? null,
+                    'callDate' => $callDate,
+                    'calledAt' => $calledAt,
+                    'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
+                    'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
+                    'callStatus' => $data['status'] ?? null,
+                    'recordFile' => $data['record_file'] ?? null,
+                    'asteriskCallId' => $data['asterisk_call_id'] ?? null,
+                    'rawContent' => $data['raw_content'] ?? null,
+                    'company' => $data['company'] ?? null,
+                    'outboundCnum' => $data['outbound_cnum'] ?? null,
+                    'createdAt' => now(),
+                    'updatedAt' => now(),
+                ]);
+
+                Log::info('Asterisk call log INSERTED (no initiate record found)', [
+                    'case_id' => $data['case_id'],
+                    'asterisk_call_id' => $data['asterisk_call_id'],
+                ]);
+            }
 
         } catch (\Exception $e) {
             Log::error('Failed to save Asterisk log to database', [
