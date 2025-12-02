@@ -357,24 +357,24 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ], 404);
             }
 
-            if (!$phoneCollection->subBatchId) {
+            if (!$phoneCollection->batchId) {  // ← SỬA: subBatchId → batchId
                 return response()->json([
                     'success' => false,
-                    'message' => 'No sub-batch assigned to this phone collection',
-                    'error' => 'subBatchId is null for this phone collection'
+                    'message' => 'No batch assigned to this phone collection',
+                    'error' => 'batchId is null for this phone collection'
                 ], 400);
             }
 
-            $subBatchId = $phoneCollection->subBatchId;
+            $batchId = $phoneCollection->batchId;  // ← SỬA: dùng batchId
 
-            Log::info('Found subBatchId for phone collection', [
+            Log::info('Found batchId for phone collection', [  // ← SỬA log message
                 'phone_collection_id' => $phoneCollectionId,
-                'sub_batch_id' => $subBatchId
+                'batch_id' => $batchId  // ← SỬA log key
             ]);
 
-            // Step 2: Get case results for this sub-batch
+            // Step 2: Get case results for this batch
             $caseResults = TblCcCaseResult::active()
-                                        ->byBatch($subBatchId)
+                                        ->byBatch($batchId)  // ← SỬA: dùng batchId
                                         ->orderBy('caseResultName')
                                         ->get([
                                             'caseResultId',
@@ -386,7 +386,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                                         ]);
 
             Log::info('Case results retrieved', [
-                'sub_batch_id' => $subBatchId,
+                'batch_id' => $batchId,  // ← SỬA log key
                 'results_count' => $caseResults->count()
             ]);
 
@@ -396,8 +396,8 @@ class TblCcPhoneCollectionDetailController extends Controller
                 'data' => [
                     'phone_collection' => [
                         'id' => $phoneCollection->phoneCollectionId,
-                        'batch_id' => $phoneCollection->batchId,      // Parent batch
-                        'sub_batch_id' => $subBatchId,                 // Sub-batch (used for query)
+                        'batch_id' => $phoneCollection->batchId,
+                        'sub_batch_id' => $phoneCollection->subBatchId,  // ← VẪN GIỮ ĐỂ SHOW
                         'contract_no' => $phoneCollection->contractNo,
                         'customer_name' => $phoneCollection->customerFullName,
                     ],

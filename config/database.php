@@ -27,7 +27,7 @@ return [
             'port' => env('DB_PORT', '54321'),
             'database' => env('DB_DATABASE', 'app'),
             'username' => env('DB_USERNAME', 'app'),
-            'password' => 'secret', // Hardcode password
+            'password' => 'secret',
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
