@@ -191,14 +191,26 @@ class PhoneCollectionSyncService
         try {
             DB::beginTransaction();
 
-            $excludedPaymentIds = \App\Models\TblCcPromiseHistory::where('isActive', true)
+            $excludedFromNew = \App\Models\TblCcPromiseHistory::where('isActive', true)
                 ->where(function($query) {
                     $query->where('promisedPaymentDate', '>', now()->toDateString())
-                          ->orWhere('dtCallLater', '>', now());
+                        ->orWhere('dtCallLater', '>', now());
                 })
                 ->pluck('paymentId')
-                ->unique()
                 ->toArray();
+
+            // Get excluded payments from old table
+            $excludedFromOld = DB::table('tbl_CcPromiseHistory_Old')
+                ->where('isActive', true)
+                ->where(function($query) {
+                    $query->where('promisedPaymentDate', '>', now()->toDateString())
+                        ->orWhere('dtCallLater', '>', now());
+                })
+                ->pluck('paymentId')
+                ->toArray();
+
+            // Merge and remove duplicates
+            $excludedPaymentIds = array_unique(array_merge($excludedFromNew, $excludedFromOld));
 
             if (!empty($excludedPaymentIds)) {
                 Log::info('Excluding payments with active promises from sync', [
