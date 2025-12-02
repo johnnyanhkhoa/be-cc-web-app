@@ -252,4 +252,24 @@ class TblCcPhoneCollectionDetail extends Model
             'phoneCollectionDetailId'
         );
     }
+
+    // Add new relationship for old upload images
+    public function uploadImagesOld()
+    {
+        return $this->hasMany(
+            \App\Models\TblCcUploadImageOld::class,
+            'phoneCollectionDetailId',
+            'phoneCollectionDetailId'
+        )
+        ->whereNull('tbl_CcUploadImage_Old.deletedAt');
+    }
+
+    // Combine both new and old images
+    public function getAllUploadImages()
+    {
+        $newImages = $this->uploadImages;
+        $oldImages = $this->uploadImagesOld;
+
+        return $newImages->merge($oldImages);
+    }
 }

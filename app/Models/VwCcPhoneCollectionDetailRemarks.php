@@ -38,4 +38,15 @@ class VwCcPhoneCollectionDetailRemarks extends Model
     {
         return $this->hasMany(TblCcUploadImage::class, 'phoneCollectionDetailId', 'phoneCollectionDetailId');
     }
+
+    public function callResult()
+    {
+        return $this->belongsTo(TblCcCaseResult::class, 'callResultId', 'caseResultId');
+    }
+
+    public function uploadImagesOld()
+    {
+        return $this->hasMany(\App\Models\TblCcUploadImageOld::class, 'phoneCollectionDetailId', 'phoneCollectionDetailId')
+            ->whereNull('tbl_CcUploadImage_Old.deletedAt');
+    }
 }

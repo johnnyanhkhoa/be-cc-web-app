@@ -184,15 +184,24 @@ class TblCcPhoneCollectionDetailController extends Controller
             }
 
             // Get call attempts with relationships
-            $attempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'reason', 'uploadImages'])
-                ->byPhoneCollectionId($phoneCollectionId)
+            $contractId = $phoneCollection->contractId;
+
+            // Get all phoneCollectionIds for this contract (from all years)
+            $allPhoneCollectionIds = VwCcPhoneCollectionBasic::where('contractId', $contractId)
+                ->pluck('phoneCollectionId')
+                ->toArray();
+
+            // Get call attempts from VIEW (all years) with relationships
+            $attempts = VwCcPhoneCollectionDetailRemarks::with(['standardRemark', 'callResult', 'reason', 'uploadImages', 'uploadImagesOld'])
+                ->whereIn('phoneCollectionId', $allPhoneCollectionIds)
                 ->orderBy('createdAt', 'desc')
                 ->get();
 
             // Transform data for response
             $transformedAttempts = $attempts->map(function ($attempt) {
-                // Get uploaded images from relationship
-                $uploadedImages = $attempt->uploadImages->map(function ($image) {
+                // Merge images from both new and old tables
+                $allImages = $attempt->uploadImages->merge($attempt->uploadImagesOld ?? collect());
+                $uploadedImages = $allImages->map(function ($image) {
                     return [
                         'uploadImageId' => $image->uploadImageId,
                         'fileName' => $image->fileName,
