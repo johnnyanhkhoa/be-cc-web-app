@@ -363,6 +363,7 @@ class TblCcPhoneCollectionController extends Controller
                     'dueDate' => $pc->dueDate?->format('Y-m-d'),
                     'daysOverdueGross' => $pc->daysOverdueGross,
                     'daysOverdueNet' => $pc->daysOverdueNet,
+                    'daysSinceLastPayment' => $pc->daysSinceLastPayment,
                     'totalAmount' => $pc->totalAmount,
                     'penaltyAmount' => $pc->penaltyAmount,
                     'amountUnpaid' => $pc->amountUnpaid,
