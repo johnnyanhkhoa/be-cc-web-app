@@ -174,9 +174,11 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             'Total Amount',
             'Amount Paid',
             'Amount Unpaid',
+            'Batch Name',           // ← THÊM
+            'DPD',                  // ← THÊM
             'Assigned By',
             'Assigned To',
-            'Assigned At',
+            // 'Assigned At',       // ← XÓA DÒNG NÀY
             'Last Attempt By',
             'Call Started',
             'Call Ended',
@@ -185,6 +187,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             'Call Result',
             'Not Paying Reason',
             'Standard Remark',
+            'Detailed Remark',      // ← THÊM
             'Uncall',
             'Reschedule',
             'Phone No 1',
@@ -233,6 +236,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
         $callStatus = null;
         $callResultName = null;
         $standardRemarkContent = null;
+        $detailedRemark = null;      // ← THÊM
         $notPayingReason = null;
 
         if ($latestAttempt) {
@@ -240,12 +244,17 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $dtCallEnded = $latestAttempt->dtCallEnded;
             $callStatus = $latestAttempt->callStatus;
             $standardRemarkContent = $latestAttempt->standardRemarkContent;
+            $detailedRemark = $latestAttempt->remark;  // ← THÊM
 
-            // Calculate duration
+            // Calculate duration - SỬA LẠI
             if ($latestAttempt->dtCallStarted && $latestAttempt->dtCallEnded) {
-                $start = \Carbon\Carbon::parse($latestAttempt->dtCallStarted);
-                $end = \Carbon\Carbon::parse($latestAttempt->dtCallEnded);
-                $duration = $end->diffInSeconds($start);
+                try {
+                    $start = \Carbon\Carbon::parse($latestAttempt->dtCallStarted);
+                    $end = \Carbon\Carbon::parse($latestAttempt->dtCallEnded);
+                    $duration = $start->diffInSeconds($end);  // ← SỬA: đổi thứ tự
+                } catch (\Exception $e) {
+                    $duration = null;
+                }
             }
 
             // Get case result
@@ -256,6 +265,18 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             // Get reason
             if ($latestAttempt->reasonId && isset($this->reasons[$latestAttempt->reasonId])) {
                 $notPayingReason = $this->reasons[$latestAttempt->reasonId]->reasonName;
+            }
+        }
+
+        // Calculate DPD (Days Past Due) - THÊM
+        $dpd = null;
+        if ($pc->dueDate) {
+            $dueDate = \Carbon\Carbon::parse($pc->dueDate);
+            $today = \Carbon\Carbon::now();
+            if ($today->greaterThan($dueDate)) {
+                $dpd = $dueDate->diffInDays($today);
+            } else {
+                $dpd = 0;
             }
         }
 
@@ -282,9 +303,11 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $pc->totalAmount,
             $pc->amountPaid,
             $pc->amountUnpaid,
+            $pc->batchName ?? null,        // ← THÊM
+            $dpd,                           // ← THÊM
             $assignedByName,
             $assignedToName,
-            $pc->assignedAt?->format('Y-m-d H:i:s'),
+            // $pc->assignedAt?->format('Y-m-d H:i:s'),  // ← XÓA
             $lastAttemptByName,
             $dtCallStarted,
             $dtCallEnded,
@@ -293,6 +316,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $callResultName,
             $notPayingReason,
             $standardRemarkContent,
+            $detailedRemark,               // ← THÊM
             $pc->lastAttemptAt === null ? 'Yes' : 'No',
             $pc->reschedule ? 'Yes' : 'No',
             $pc->phoneNo1,
