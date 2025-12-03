@@ -612,32 +612,46 @@ class TblCcPhoneCollectionDetailController extends Controller
             ->get();
 
             $transformedRemarks = $callDetails->map(function ($detail) {
-                return [
-                    'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
-                    'phoneCollectionId' => $detail->phoneCollectionId,
-                    'contractId' => $detail->phoneCollection->contractId ?? null,
-                    'customerFullName' => $detail->phoneCollection->customerFullName ?? null,
-                    'remark' => $detail->remark,
-                    'standardRemarkContent' => $detail->standardRemarkContent,
-                    'standardRemarkId' => $detail->standardRemarkId,
-                    'standardRemark' => $detail->standardRemark ? [
-                        'remarkId' => $detail->standardRemark->remarkId,
-                        'remarkContent' => $detail->standardRemark->remarkContent,
-                        'contactType' => $detail->standardRemark->contactType,
-                    ] : null,
-                    'reasonId' => $detail->reasonId,
-                    'reasonName' => $detail->reason?->reasonName,
-                    'reasonRemark' => $detail->reason?->reasonRemark,
-                    'contactType' => $detail->contactType,
-                    'callStatus' => $detail->callStatus,
-                    'contactPhoneNumer' => $detail->contactPhoneNumer,
-                    'createdAt' => $detail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'createdBy' => $detail->createdBy,
-                    'creator' => $detail->creator ? [
-                        'id' => $detail->creator->id,
-                        'username' => $detail->creator->username,
-                        'userFullName' => $detail->creator->userFullName,
-                    ] : null,
+            // ✅ Handle creator - use userCreatedBy from old tables if createdBy is null
+            $creatorInfo = null;
+            if ($detail->creator) {
+                // New table: has user relationship
+                $creatorInfo = [
+                    'id' => $detail->creator->id,
+                    'username' => $detail->creator->username,
+                    'userFullName' => $detail->creator->userFullName,
+                ];
+            } elseif ($detail->userCreatedBy) {
+                // Old table: use userCreatedBy as username
+                $creatorInfo = [
+                    'id' => null,
+                    'username' => $detail->userCreatedBy,
+                    'userFullName' => $detail->userCreatedBy,
+                ];
+            }
+
+            return [
+                'phoneCollectionDetailId' => $detail->phoneCollectionDetailId,
+                'phoneCollectionId' => $detail->phoneCollectionId,
+                'contractId' => $detail->phoneCollection->contractId ?? null,
+                'customerFullName' => $detail->phoneCollection->customerFullName ?? null,
+                'remark' => $detail->remark,
+                'standardRemarkContent' => $detail->standardRemarkContent,
+                'standardRemarkId' => $detail->standardRemarkId,
+                'standardRemark' => $detail->standardRemark ? [
+                    'remarkId' => $detail->standardRemark->remarkId,
+                    'remarkContent' => $detail->standardRemark->remarkContent,
+                    'contactType' => $detail->standardRemark->contactType,
+                ] : null,
+                'reasonId' => $detail->reasonId,
+                'reasonName' => $detail->reason?->reasonName,
+                'reasonRemark' => $detail->reason?->reasonRemark,
+                'contactType' => $detail->contactType,
+                'callStatus' => $detail->callStatus,
+                'contactPhoneNumer' => $detail->contactPhoneNumer,
+                'createdAt' => $detail->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+                'createdBy' => $detail->createdBy ?? $detail->userCreatedBy,  // ✅ Fallback to userCreatedBy
+                'creator' => $creatorInfo,  // ✅ Use processed creator info
                     'uploadedImages' => $detail->uploadImages->map(function ($image) {
                         return [
                             'uploadImageId' => $image->uploadImageId,

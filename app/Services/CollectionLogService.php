@@ -153,26 +153,31 @@ class CollectionLogService
     protected function getPhoneCollectionLogs(int $contractId, string $fromDate, string $toDate): Collection
     {
         try {
-            // Get phone collection IDs for this contract
-            $phoneCollectionIds = TblCcPhoneCollection::where('contractId', $contractId)
+            // ✅ Get all phone collection IDs for this contract from VIEW (all years)
+            $allPhoneCollectionIds = \App\Models\VwCcPhoneCollectionBasic::where('contractId', $contractId)
                 ->pluck('phoneCollectionId')
                 ->toArray();
 
-            if (empty($phoneCollectionIds)) {
+            if (empty($allPhoneCollectionIds)) {
                 Log::info('No phone collections found for contract', ['contract_id' => $contractId]);
                 return collect([]);
             }
 
-            // ✅ Eager load creator relationship
-            $details = TblCcPhoneCollectionDetail::with([
-                'creator', // ✅ Load user info
+            // ✅ Query from VIEW (includes all years 2020-2025)
+            $details = \App\Models\VwCcPhoneCollectionDetailRemarks::with([
+                'creator',
                 'standardRemark',
                 'callResult',
+                'reason',
                 'phoneCollection',
-                'uploadImages'
+                'uploadImages',
+                'uploadImagesOld'  // ✅ Include old images
             ])
-                ->whereIn('phoneCollectionId', $phoneCollectionIds)
-                ->whereBetween('createdAt', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59'])
+                ->whereIn('phoneCollectionId', $allPhoneCollectionIds)
+                ->whereRaw(
+                    'DATE("createdAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
+                    [$fromDate, $toDate]
+                )
                 ->orderBy('createdAt', 'desc')
                 ->get();
 
@@ -306,7 +311,7 @@ class CollectionLogService
      * @param TblCcPhoneCollectionDetail $detail
      * @return array
      */
-    protected function transformPhoneCollectionDetail(TblCcPhoneCollectionDetail $detail): array
+    protected function transformPhoneCollectionDetail($detail): array
     {
         return [
             // ========================================
@@ -333,17 +338,19 @@ class CollectionLogService
                 'workPlaceId' => null, // Not available in users table
             ],
 
-            'images' => $detail->uploadImages->map(function ($image) {
-                return [
-                    'imageId' => $image->uploadImageId,
-                    'imageType' => 'phone_collection_image',
-                    'fileName' => $image->fileName,
-                    'fileType' => $image->fileType,
-                    'localUrl' => $image->localUrl,
-                    'googleUrl' => $image->googleUrl,
-                    'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
-                ];
-            })->toArray(),
+            'images' => $detail->uploadImages
+                ->merge($detail->uploadImagesOld ?? collect())  // ✅ Merge old images
+                ->map(function ($image) {
+                    return [
+                        'imageId' => $image->uploadImageId,
+                        'imageType' => 'phone_collection_image',
+                        'fileName' => $image->fileName,
+                        'fileType' => $image->fileType,
+                        'localUrl' => $image->localUrl,
+                        'googleUrl' => $image->googleUrl,
+                        'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                    ];
+                })->toArray(),
 
             // ========================================
             // LITIGATION-SPECIFIC FIELDS (null for phone collection)
