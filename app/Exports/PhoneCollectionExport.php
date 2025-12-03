@@ -278,8 +278,8 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
         // Get batch name from relationship
         $batchName = $pc->batch?->batchName ?? null;
 
-        // Get DPD from daysOverdueNet (already calculated in DB)
-        $dpd = $pc->daysOverdueNet ?? 0;
+        // Get DPD from daysOverdueGross (already calculated in DB)
+        $dpd = $pc->daysOverdueGross ?? 0;
 
         return [
             $pc->salesAreaName,
@@ -305,7 +305,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $pc->amountPaid,
             $pc->amountUnpaid,
             $batchName,                    // ← SỬA: lấy từ relationship
-            $dpd,                          // ← SỬA: lấy từ daysOverdueNet
+            $dpd,                          // ← SỬA: lấy từ daysOverdueGross
             $assignedByName,
             $assignedToName,
             $lastAttemptByName,
