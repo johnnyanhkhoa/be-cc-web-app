@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\PhoneCollectionExport;
 
 class TblCcPhoneCollectionController extends Controller
 {
@@ -677,14 +679,14 @@ class TblCcPhoneCollectionController extends Controller
     }
 
     /**
-     * Export collection report
+     * Export collection report to Excel
      *
      * GET /api/cc-phone-collections/export-report?from=2025-11-01&to=2025-11-30
      *
      * @param Request $request
-     * @return JsonResponse
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
      */
-    public function exportReport(Request $request): JsonResponse
+    public function exportReport(Request $request)
     {
         try {
             // Validate dates
@@ -696,372 +698,31 @@ class TblCcPhoneCollectionController extends Controller
             $fromDate = $request->input('from');
             $toDate = $request->input('to');
 
-            Log::info('Exporting collection report', [
+            // Set higher limits for large exports
+            set_time_limit(300); // 5 minutes
+            ini_set('memory_limit', '512M');
+
+            Log::info('Starting Excel export', [
                 'from_date' => $fromDate,
                 'to_date' => $toDate
             ]);
 
-            // Query phone collections in date range WITH promise history
-            $phoneCollections = TblCcPhoneCollection::select([
-                    'tbl_CcPhoneCollection.*',
-                    'latest_promise.promisedPaymentDate as latest_promisedPaymentDate',
-                    'latest_promise.dtCallLater as latest_dtCallLater'
-                ])
-                ->leftJoin('tbl_CcPromiseHistory as latest_promise', function($join) {
-                    $join->on('latest_promise.paymentId', '=', 'tbl_CcPhoneCollection.paymentId')
-                        ->where('latest_promise.isActive', '=', true)
-                        ->whereRaw('"latest_promise"."createdAt" = (
-                            SELECT MAX("ph2"."createdAt")
-                            FROM "tbl_CcPromiseHistory" "ph2"
-                            WHERE "ph2"."paymentId" = "tbl_CcPhoneCollection"."paymentId"
-                            AND "ph2"."isActive" = true
-                        )');
-                })
-                ->whereRaw(
-                    'DATE("tbl_CcPhoneCollection"."assignedAt" AT TIME ZONE \'Asia/Yangon\') BETWEEN ? AND ?',
-                    [$fromDate, $toDate]
-                )
-                ->orderBy('tbl_CcPhoneCollection.assignedAt', 'asc')
-                ->get();
+            $filename = "collection_report_{$fromDate}_to_{$toDate}.xlsx";
 
-            if ($phoneCollections->isEmpty()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No records found for the specified date range',
-                    'data' => [],
-                    'total' => 0
-                ], 200);
-            }
+            return Excel::download(
+                new PhoneCollectionExport($fromDate, $toDate),
+                $filename
+            );
 
-            Log::info('Phone collections loaded', [
-                'total_records' => $phoneCollections->count()
-            ]);
-
-            // Collect unique user IDs for batch loading
-            $userIds = collect();
-            $phoneCollections->each(function($pc) use ($userIds) {
-                if ($pc->assignedBy) $userIds->push($pc->assignedBy);
-                if ($pc->assignedTo) $userIds->push($pc->assignedTo);
-                if ($pc->lastAttemptBy) $userIds->push($pc->lastAttemptBy);
-            });
-            $userIds = $userIds->unique()->filter()->values()->toArray();
-
-            // Batch load users
-            $users = [];
-            if (!empty($userIds)) {
-                $users = User::whereIn('authUserId', $userIds)
-                    ->get()
-                    ->keyBy('authUserId');
-            }
-
-            // Get phone collection IDs for loading attempts
-            $phoneCollectionIds = $phoneCollections->pluck('phoneCollectionId')->toArray();
-
-            // Batch load latest attempts
-            $latestAttempts = DB::table('tbl_CcPhoneCollectionDetail as pcd1')
-                ->select('pcd1.*')
-                ->whereIn('pcd1.phoneCollectionId', $phoneCollectionIds)
-                ->whereRaw('"pcd1"."phoneCollectionDetailId" = (
-                    SELECT "pcd2"."phoneCollectionDetailId"
-                    FROM "tbl_CcPhoneCollectionDetail" "pcd2"
-                    WHERE "pcd2"."phoneCollectionId" = "pcd1"."phoneCollectionId"
-                    ORDER BY "pcd2"."dtCallStarted" DESC
-                    LIMIT 1
-                )')
-                ->get()
-                ->keyBy('phoneCollectionId');
-
-            // Get unique case result IDs from attempts
-            $caseResultIds = $latestAttempts->pluck('callResultId')->filter()->unique()->values()->toArray();
-
-            // Batch load case results
-            $caseResults = [];
-            if (!empty($caseResultIds)) {
-                $caseResults = DB::table('tbl_CcCaseResult')
-                    ->whereIn('caseResultId', $caseResultIds)
-                    ->get()
-                    ->keyBy('caseResultId');
-            }
-
-            // Get unique reason IDs from attempts
-            $reasonIds = $latestAttempts->pluck('reasonId')->filter()->unique()->values()->toArray();
-
-            // Batch load reasons
-            $reasons = [];
-            if (!empty($reasonIds)) {
-                $reasons = DB::table('tbl_CcReason')
-                    ->whereIn('reasonId', $reasonIds)
-                    ->get()
-                    ->keyBy('reasonId');
-            }
-
-            // Get unique batch IDs from phone collections
-            $batchIds = $phoneCollections->pluck('batchId')->filter()->unique()->values()->toArray();
-
-            // Batch load batches
-            $batches = [];
-            if (!empty($batchIds)) {
-                $batches = DB::table('tbl_CcBatch')
-                    ->whereIn('batchId', $batchIds)
-                    ->get()
-                    ->keyBy('batchId');
-            }
-
-            // Batch load user levels (need both assignedTo and batchId)
-            // First, create a map of authUserId -> userId (local ID)
-            $authUserIds = $phoneCollections
-                ->pluck('assignedTo')
-                ->filter()
-                ->unique()
-                ->values()
-                ->toArray();
-
-            $authToLocalUserIdMap = [];
-            if (!empty($authUserIds)) {
-                $localUsers = User::whereIn('authUserId', $authUserIds)
-                    ->get(['id', 'authUserId']);
-
-                foreach ($localUsers as $user) {
-                    $authToLocalUserIdMap[$user->authUserId] = $user->id;
-                }
-            }
-
-            // Create array of [userId (local), batchId] pairs
-            $userLevelPairs = $phoneCollections
-                ->filter(function($pc) use ($authToLocalUserIdMap) {
-                    return $pc->assignedTo !== null
-                        && $pc->batchId !== null
-                        && isset($authToLocalUserIdMap[$pc->assignedTo]);
-                })
-                ->map(function($pc) use ($authToLocalUserIdMap) {
-                    return [
-                        'userId' => $authToLocalUserIdMap[$pc->assignedTo],
-                        'authUserId' => $pc->assignedTo,
-                        'batchId' => $pc->batchId
-                    ];
-                })
-                ->unique(function($pair) {
-                    return $pair['userId'] . '_' . $pair['batchId'];
-                })
-                ->values();
-
-            // Load user levels using userId (local ID)
-            $userLevels = [];
-            if ($userLevelPairs->isNotEmpty()) {
-                $userLevelsRaw = DB::table('tbl_CcUserLevel')
-                    ->whereIn('userId', $userLevelPairs->pluck('userId')->unique()->toArray())
-                    ->whereIn('batchId', $userLevelPairs->pluck('batchId')->unique()->toArray())
-                    ->get();
-
-                // Create a map: userId_batchId -> level
-                $userLevelsByUserIdBatchId = [];
-                foreach ($userLevelsRaw as $userLevel) {
-                    $key = $userLevel->userId . '_' . $userLevel->batchId;
-                    $userLevelsByUserIdBatchId[$key] = $userLevel;
-                }
-
-                // Convert to authUserId_batchId for easy lookup in map function
-                foreach ($userLevelPairs as $pair) {
-                    $userIdKey = $pair['userId'] . '_' . $pair['batchId'];
-                    $authUserIdKey = $pair['authUserId'] . '_' . $pair['batchId'];
-
-                    if (isset($userLevelsByUserIdBatchId[$userIdKey])) {
-                        $userLevels[$authUserIdKey] = $userLevelsByUserIdBatchId[$userIdKey];
-                    }
-                }
-            }
-
-            // ============================================================
-            // Count askingPostponePayment per contractId (FULL HISTORY)
-            // ============================================================
-            $contractIds = $phoneCollections->pluck('contractId')->filter()->unique()->toArray();
-            $postponeCountByContract = [];
-
-            if (!empty($contractIds)) {
-                $postponeCounts = DB::table('tbl_CcPhoneCollectionDetail as pcd')
-                    ->join('tbl_CcPhoneCollection as pc', 'pc.phoneCollectionId', '=', 'pcd.phoneCollectionId')
-                    ->whereIn('pc.contractId', $contractIds)
-                    ->where('pcd.askingPostponePayment', '=', true)
-                    ->groupBy('pc.contractId')
-                    ->select([
-                        'pc.contractId',
-                        DB::raw('COUNT(*) as postpone_count')
-                    ])
-                    ->get();
-
-                foreach ($postponeCounts as $count) {
-                    $postponeCountByContract[$count->contractId] = (int)$count->postpone_count;
-                }
-
-                Log::info('Counted askingPostponePayment per contract', [
-                    'total_contracts_with_postpone' => count($postponeCountByContract)
-                ]);
-            }
-            // ============================================================
-
-            // Transform data
-            $reportData = $phoneCollections->map(function($pc) use ($users, $latestAttempts, $caseResults, $reasons, $postponeCountByContract, $batches, $userLevels) {
-                // Get user names
-                $assignedByName = null;
-                if ($pc->assignedBy) {
-                    if ($pc->assignedBy === 1) {
-                        $assignedByName = 'System';
-                    } elseif (isset($users[$pc->assignedBy])) {
-                        $assignedByName = $users[$pc->assignedBy]->userFullName;
-                    }
-                }
-
-                $assignedToName = isset($users[$pc->assignedTo])
-                    ? $users[$pc->assignedTo]->userFullName
-                    : null;
-
-                $lastAttemptByName = isset($users[$pc->lastAttemptBy])
-                    ? $users[$pc->lastAttemptBy]->userFullName
-                    : null;
-
-                // Get latest attempt details
-                $latestAttempt = $latestAttempts->get($pc->phoneCollectionId);
-
-                $attemptData = [
-                    'dtCallStarted' => null,
-                    'dtCallEnded' => null,
-                    'duration' => null,
-                    'callStatus' => null,
-                    'callResultName' => null,
-                    'standardRemarkContent' => null,
-                    'notPayingReason' => null,
-                ];
-
-                if ($latestAttempt) {
-                    $attemptData['dtCallStarted'] = $latestAttempt->dtCallStarted;
-                    $attemptData['dtCallEnded'] = $latestAttempt->dtCallEnded;
-                    $attemptData['callStatus'] = $latestAttempt->callStatus;
-                    $attemptData['standardRemarkContent'] = $latestAttempt->standardRemarkContent;
-
-                    // Calculate duration in seconds
-                    if ($latestAttempt->dtCallStarted && $latestAttempt->dtCallEnded) {
-                        $start = \Carbon\Carbon::parse($latestAttempt->dtCallStarted);
-                        $end = \Carbon\Carbon::parse($latestAttempt->dtCallEnded);
-                        $attemptData['duration'] = $end->diffInSeconds($start);
-                    }
-
-                    // Get case result name
-                    if ($latestAttempt->callResultId && isset($caseResults[$latestAttempt->callResultId])) {
-                        $attemptData['callResultName'] = $caseResults[$latestAttempt->callResultId]->caseResultName;
-                    }
-
-                    // Get reason name (not paying reason)
-                    if ($latestAttempt->reasonId && isset($reasons[$latestAttempt->reasonId])) {
-                        $attemptData['notPayingReason'] = $reasons[$latestAttempt->reasonId]->reasonName;
-                    }
-                }
-
-                // Get batch name (MOVED OUTSIDE if block)
-                $batchName = null;
-                if ($pc->batchId && isset($batches[$pc->batchId])) {
-                    $batchName = $batches[$pc->batchId]->batchName;
-                }
-
-                // Get user level (MOVED OUTSIDE if block)
-                $userLevel = null;
-                if ($pc->assignedTo && $pc->batchId) {
-                    $userLevelKey = $pc->assignedTo . '_' . $pc->batchId;
-                    if (isset($userLevels[$userLevelKey])) {
-                        $userLevel = $userLevels[$userLevelKey]->level;
-                    }
-                }
-
-                return [
-                    'salesAreaName' => $pc->salesAreaName,
-                    'branch' => $pc->contractPlaceName,
-                    'customerId' => $pc->customerId,
-                    'birthDate' => $pc->birthDate?->format('Y-m-d'),
-                    'gender' => $pc->gender,
-                    'contractNo' => $pc->contractNo,
-                    'contractDate' => $pc->contractDate?->format('Y-m-d'),
-                    'contractingProductType' => $pc->contractingProductType,
-                    'productName' => $pc->productName,
-                    'productColor' => $pc->productColor,
-                    'plateNo' => $pc->plateNo,
-                    'unitPrice' => $pc->unitPrice,
-                    'paymentNo' => $pc->paymentNo,
-                    'paymentStatus' => $pc->paymentStatus,
-                    'lastPaymentDate' => $pc->lastPaymentDate?->format('Y-m-d'),
-                    'dueDate' => $pc->dueDate?->format('Y-m-d'),
-                    'paymentAmount' => $pc->paymentAmount,
-                    'penaltyAmount' => $pc->penaltyAmount,
-                    'penaltyExempted' => $pc->penaltyExempted,
-                    'totalAmount' => $pc->totalAmount,
-                    'amountPaid' => $pc->amountPaid,
-                    'amountUnpaid' => $pc->amountUnpaid,
-                    'batchName' => $batchName,              // ← THÊM MỚI
-                    'DPD' => $pc->daysOverdueGross,
-                    'assignedByName' => $assignedByName,
-                    'assignedToName' => $assignedToName,
-                    'userLevel' => $userLevel,
-                    'assignedAt' => $pc->assignedAt?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'lastAttemptBy' => $lastAttemptByName,
-                    'dtCallStarted' => $attemptData['dtCallStarted'],
-                    'dtCallEnded' => $attemptData['dtCallEnded'],
-                    'duration' => $attemptData['duration'],
-                    'callStatus' => $attemptData['callStatus'],
-                    'callResultName' => $attemptData['callResultName'],
-                    'notPayingReason' => $attemptData['notPayingReason'],
-                    'standardRemarkContent' => $attemptData['standardRemarkContent'],
-                    'uncall' => $pc->lastAttemptAt === null,
-                    'reschedule' => $pc->reschedule,
-                    'phoneNo1' => $pc->phoneNo1,
-                    'phoneNo2' => $pc->phoneNo2,
-                    'phoneNo3' => $pc->phoneNo3,
-                    'homeAddress' => $pc->homeAddress,
-                    'noOfPenaltyFeesCharged' => $pc->noOfPenaltyFeesCharged,
-                    'noOfPenaltyFeesExempted' => $pc->noOfPenaltyFeesExempted,
-                    'noOfPenaltyFeesPaid' => $pc->noOfPenaltyFeesPaid,
-                    'totalPenaltyAmountCharged' => $pc->totalPenaltyAmountCharged,
-
-                    // ============================================================
-                    // Promise and Postpone Info
-                    // ============================================================
-                    'promisedPaymentDate' => $pc->latest_promisedPaymentDate
-                        ? \Carbon\Carbon::parse($pc->latest_promisedPaymentDate)->format('Y-m-d')
-                        : null,
-                    'dtCallLater' => $pc->latest_dtCallLater
-                        ? \Carbon\Carbon::parse($pc->latest_dtCallLater)->utc()->format('Y-m-d\TH:i:s\Z')
-                        : null,
-                    'noOfAskingPostponePayment' => $postponeCountByContract[$pc->contractId] ?? 0,
-                    // ============================================================
-
-                    'source' => 'phone-collection',
-                ];
-            });
-
-            Log::info('Collection report generated successfully', [
-                'total_records' => $reportData->count(),
-                'from_date' => $fromDate,
-                'to_date' => $toDate
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Collection report generated successfully',
-                'data' => $reportData,
-                'total' => $reportData->count(),
-                'date_range' => [
-                    'from' => $fromDate,
-                    'to' => $toDate
-                ]
-            ], 200);
-
-        } catch (Exception $e) {
-            Log::error('Failed to generate collection report', [
+        } catch (\Exception $e) {
+            Log::error('Failed to export collection report', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_params' => $request->all()
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to generate collection report',
+                'message' => 'Failed to export report',
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
