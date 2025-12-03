@@ -45,6 +45,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
                 'latest_promise.promisedPaymentDate as latest_promisedPaymentDate',
                 'latest_promise.dtCallLater as latest_dtCallLater'
             ])
+            ->with(['batch'])
             ->leftJoin('tbl_CcPromiseHistory as latest_promise', function($join) {
                 $join->on('latest_promise.paymentId', '=', 'tbl_CcPhoneCollection.paymentId')
                     ->where('latest_promise.isActive', '=', true)
@@ -236,22 +237,28 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
         $callStatus = null;
         $callResultName = null;
         $standardRemarkContent = null;
-        $detailedRemark = null;      // ← THÊM
+        $detailedRemark = null;
         $notPayingReason = null;
 
         if ($latestAttempt) {
-            $dtCallStarted = $latestAttempt->dtCallStarted;
-            $dtCallEnded = $latestAttempt->dtCallEnded;
+            // Convert to Myanmar timezone
+            $dtCallStarted = $latestAttempt->dtCallStarted
+                ? \Carbon\Carbon::parse($latestAttempt->dtCallStarted)->timezone('Asia/Yangon')->format('Y-m-d H:i:s')
+                : null;
+            $dtCallEnded = $latestAttempt->dtCallEnded
+                ? \Carbon\Carbon::parse($latestAttempt->dtCallEnded)->timezone('Asia/Yangon')->format('Y-m-d H:i:s')
+                : null;
+
             $callStatus = $latestAttempt->callStatus;
             $standardRemarkContent = $latestAttempt->standardRemarkContent;
-            $detailedRemark = $latestAttempt->remark;  // ← THÊM
+            $detailedRemark = $latestAttempt->remark;
 
-            // Calculate duration - SỬA LẠI
+            // Calculate duration correctly
             if ($latestAttempt->dtCallStarted && $latestAttempt->dtCallEnded) {
                 try {
                     $start = \Carbon\Carbon::parse($latestAttempt->dtCallStarted);
                     $end = \Carbon\Carbon::parse($latestAttempt->dtCallEnded);
-                    $duration = $start->diffInSeconds($end);  // ← SỬA: đổi thứ tự
+                    $duration = $start->diffInSeconds($end);
                 } catch (\Exception $e) {
                     $duration = null;
                 }
@@ -268,17 +275,11 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             }
         }
 
-        // Calculate DPD (Days Past Due) - THÊM
-        $dpd = null;
-        if ($pc->dueDate) {
-            $dueDate = \Carbon\Carbon::parse($pc->dueDate);
-            $today = \Carbon\Carbon::now();
-            if ($today->greaterThan($dueDate)) {
-                $dpd = $dueDate->diffInDays($today);
-            } else {
-                $dpd = 0;
-            }
-        }
+        // Get batch name from relationship
+        $batchName = $pc->batch?->batchName ?? null;
+
+        // Get DPD from daysOverdueNet (already calculated in DB)
+        $dpd = $pc->daysOverdueNet ?? 0;
 
         return [
             $pc->salesAreaName,
@@ -303,20 +304,19 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $pc->totalAmount,
             $pc->amountPaid,
             $pc->amountUnpaid,
-            $pc->batchName ?? null,        // ← THÊM
-            $dpd,                           // ← THÊM
+            $batchName,                    // ← SỬA: lấy từ relationship
+            $dpd,                          // ← SỬA: lấy từ daysOverdueNet
             $assignedByName,
             $assignedToName,
-            // $pc->assignedAt?->format('Y-m-d H:i:s'),  // ← XÓA
             $lastAttemptByName,
-            $dtCallStarted,
-            $dtCallEnded,
+            $dtCallStarted,                // ← ĐÃ CONVERT SANG YANGON TIMEZONE
+            $dtCallEnded,                  // ← ĐÃ CONVERT SANG YANGON TIMEZONE
             $duration,
             $callStatus,
             $callResultName,
             $notPayingReason,
             $standardRemarkContent,
-            $detailedRemark,               // ← THÊM
+            $detailedRemark,
             $pc->lastAttemptAt === null ? 'Yes' : 'No',
             $pc->reschedule ? 'Yes' : 'No',
             $pc->phoneNo1,
@@ -328,7 +328,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $pc->noOfPenaltyFeesPaid,
             $pc->totalPenaltyAmountCharged,
             $pc->latest_promisedPaymentDate ? \Carbon\Carbon::parse($pc->latest_promisedPaymentDate)->format('Y-m-d') : null,
-            $pc->latest_dtCallLater ? \Carbon\Carbon::parse($pc->latest_dtCallLater)->format('Y-m-d H:i:s') : null,
+            $pc->latest_dtCallLater ? \Carbon\Carbon::parse($pc->latest_dtCallLater)->timezone('Asia/Yangon')->format('Y-m-d H:i:s') : null,  // ← YANGON TIMEZONE
             $this->postponeCountByContract[$pc->contractId] ?? 0,
         ];
     }
