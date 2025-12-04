@@ -183,76 +183,209 @@ class TblCcPhoneCollectionDetailController extends Controller
                 ], 404);
             }
 
-            // Get call attempts with relationships
+            // Get contractId to query across all years
             $contractId = $phoneCollection->contractId;
 
-            // Get all phoneCollectionIds for this contract (from all years)
+            // Get all phoneCollectionIds for this contract from all years (2020-2025)
             $allPhoneCollectionIds = VwCcPhoneCollectionBasic::where('contractId', $contractId)
                 ->pluck('phoneCollectionId')
                 ->toArray();
 
-            // Get call attempts from VIEW (all years) with relationships
-            $attempts = VwCcPhoneCollectionDetailRemarks::with(['standardRemark', 'callResult', 'reason', 'uploadImages', 'uploadImagesOld'])
+            // Get ALL call attempts from all years (including those without remarks)
+            $attempts = collect();
+
+            // 1. Get from current table (tbl_CcPhoneCollectionDetail)
+            $currentAttempts = TblCcPhoneCollectionDetail::with(['standardRemark', 'callResult', 'reason', 'uploadImages'])
                 ->whereIn('phoneCollectionId', $allPhoneCollectionIds)
-                ->orderBy('createdAt', 'desc')
                 ->get();
+            $attempts = $attempts->merge($currentAttempts);
+
+            // 2. Get from old partitioned tables (2020-2025)
+            $oldYears = [2020, 2021, 2022, 2023, 2024, 2025];
+            foreach ($oldYears as $year) {
+                $tableName = "tbl_CcPhoneCollectionDetail_{$year}";
+
+                // Check if table exists before querying
+                $tableExists = DB::select("SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_name = ?
+                )", [$tableName]);
+
+                if ($tableExists[0]->exists) {
+                    $oldAttempts = DB::table($tableName)
+                        ->whereIn('phoneCollectionId', $allPhoneCollectionIds)
+                        ->get();
+
+                    // Map to add relationships manually for old records
+                    $oldAttempts->each(function($attempt) {
+                        // Load standardRemark if exists
+                        if (isset($attempt->standardRemarkId) && $attempt->standardRemarkId) {
+                            $attempt->standardRemark = \App\Models\TblCcRemark::find($attempt->standardRemarkId);
+                        } else {
+                            $attempt->standardRemark = null;
+                        }
+
+                        // Load callResult if exists
+                        if (isset($attempt->callResultId) && $attempt->callResultId) {
+                            $attempt->callResult = \App\Models\TblCcCaseResult::find($attempt->callResultId);
+                        } else {
+                            $attempt->callResult = null;
+                        }
+
+                        // Load reason if exists
+                        if (isset($attempt->reasonId) && $attempt->reasonId) {
+                            $attempt->reason = \App\Models\TblCcReason::find($attempt->reasonId);
+                        } else {
+                            $attempt->reason = null;
+                        }
+
+                        // Load uploadImages from old table
+                        $attempt->uploadImagesOld = \App\Models\TblCcUploadImageOld::where('phoneCollectionDetailId', $attempt->phoneCollectionDetailId)
+                            ->whereNull('deletedAt')
+                            ->get();
+                        $attempt->uploadImages = collect(); // Empty for old records
+                    });
+
+                    $attempts = $attempts->merge($oldAttempts);
+                }
+            }
+
+            // Sort by createdAt descending
+            $attempts = $attempts->sortByDesc(function($attempt) {
+                return isset($attempt->createdAt) ? $attempt->createdAt : null;
+            })->values();
 
             // Transform data for response
             $transformedAttempts = $attempts->map(function ($attempt) {
-                // Merge images from both new and old tables
-                $allImages = $attempt->uploadImages->merge($attempt->uploadImagesOld ?? collect());
+                // Merge uploaded images from both new and old tables
+                $allImages = collect();
+                if (isset($attempt->uploadImages)) {
+                    $allImages = $allImages->merge($attempt->uploadImages);
+                }
+                if (isset($attempt->uploadImagesOld)) {
+                    $allImages = $allImages->merge($attempt->uploadImagesOld);
+                }
+
                 $uploadedImages = $allImages->map(function ($image) {
                     return [
-                        'uploadImageId' => $image->uploadImageId,
-                        'fileName' => $image->fileName,
-                        'fileType' => $image->fileType,
-                        'localUrl' => $image->localUrl,
-                        'googleUrl' => $image->googleUrl,
-                        'createdAt' => $image->createdAt?->format('Y-m-d H:i:s'),
+                        'uploadImageId' => $image->uploadImageId ?? null,
+                        'fileName' => $image->fileName ?? null,
+                        'fileType' => $image->fileType ?? null,
+                        'localUrl' => $image->localUrl ?? null,
+                        'googleUrl' => $image->googleUrl ?? null,
+                        'createdAt' => isset($image->createdAt) ?
+                            (is_string($image->createdAt) ? $image->createdAt : $image->createdAt->format('Y-m-d H:i:s')) : null,
                     ];
                 })->toArray();
 
-                // Get creator by authUserId
+                // Handle creator - use userCreatedBy for old records
                 $createdByUser = null;
-                if ($attempt->createdBy) {
+                if (isset($attempt->createdBy) && $attempt->createdBy) {
+                    // New table: authUserId
                     $user = \App\Models\User::where('authUserId', $attempt->createdBy)->first();
                     $createdByUser = $user ? $user->userFullName : null;
+                } elseif (isset($attempt->userCreatedBy) && $attempt->userCreatedBy) {
+                    // Old table: username string
+                    $createdByUser = $attempt->userCreatedBy;
+                }
+
+                // Handle dates for both Eloquent models and stdClass
+                $dtCallStarted = null;
+                if (isset($attempt->dtCallStarted) && $attempt->dtCallStarted) {
+                    $dtCallStarted = is_object($attempt->dtCallStarted) && method_exists($attempt->dtCallStarted, 'utc')
+                        ? $attempt->dtCallStarted->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($attempt->dtCallStarted) ? \Carbon\Carbon::parse($attempt->dtCallStarted)->utc()->format('Y-m-d\TH:i:s\Z') : null);
+                }
+
+                $dtCallEnded = null;
+                if (isset($attempt->dtCallEnded) && $attempt->dtCallEnded) {
+                    $dtCallEnded = is_object($attempt->dtCallEnded) && method_exists($attempt->dtCallEnded, 'utc')
+                        ? $attempt->dtCallEnded->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($attempt->dtCallEnded) ? \Carbon\Carbon::parse($attempt->dtCallEnded)->utc()->format('Y-m-d\TH:i:s\Z') : null);
+                }
+
+                $dtCallLater = null;
+                if (isset($attempt->dtCallLater) && $attempt->dtCallLater) {
+                    $dtCallLater = is_object($attempt->dtCallLater) && method_exists($attempt->dtCallLater, 'utc')
+                        ? $attempt->dtCallLater->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($attempt->dtCallLater) ? \Carbon\Carbon::parse($attempt->dtCallLater)->utc()->format('Y-m-d\TH:i:s\Z') : null);
+                }
+
+                $promisedPaymentDate = null;
+                if (isset($attempt->promisedPaymentDate) && $attempt->promisedPaymentDate) {
+                    $promisedPaymentDate = is_object($attempt->promisedPaymentDate) && method_exists($attempt->promisedPaymentDate, 'format')
+                        ? $attempt->promisedPaymentDate->format('Y-m-d')
+                        : (is_string($attempt->promisedPaymentDate) ? \Carbon\Carbon::parse($attempt->promisedPaymentDate)->format('Y-m-d') : null);
+                }
+
+                $createdAt = null;
+                if (isset($attempt->createdAt) && $attempt->createdAt) {
+                    $createdAt = is_object($attempt->createdAt) && method_exists($attempt->createdAt, 'utc')
+                        ? $attempt->createdAt->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($attempt->createdAt) ? \Carbon\Carbon::parse($attempt->createdAt)->utc()->format('Y-m-d\TH:i:s\Z') : null);
                 }
 
                 return [
-                    'phoneCollectionDetailId' => $attempt->phoneCollectionDetailId,
-                    'phoneCollectionId' => $attempt->phoneCollectionId,
-                    'contactType' => $attempt->contactType,
-                    'phoneId' => $attempt->phoneId,
-                    'contactDetailId' => $attempt->contactDetailId,
-                    'contactPhoneNumer' => $attempt->contactPhoneNumer,
-                    'contactName' => $attempt->contactName,
-                    'contactRelation' => $attempt->contactRelation,
-                    'callStatus' => $attempt->callStatus,
-                    'callResultId' => $attempt->callResultId,
-                    'reasonId' => $attempt->reasonId,
-                    'reasonName' => $attempt->reason?->reasonName,           // ← THÊM DÒNG NÀY
-                    'reasonRemark' => $attempt->reason?->reasonRemark,
-                    'leaveMessage' => $attempt->leaveMessage,
-                    'remark' => $attempt->remark,
-                    'promisedPaymentDate' => $attempt->promisedPaymentDate?->format('Y-m-d'),
-                    'askingPostponePayment' => $attempt->askingPostponePayment,
-                    'dtCallLater' => $attempt->dtCallLater?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'dtCallStarted' => $attempt->dtCallStarted?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'dtCallEnded' => $attempt->dtCallEnded?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'updatePhoneRequest' => $attempt->updatePhoneRequest,
-                    'updatePhoneRemark' => $attempt->updatePhoneRemark,
-                    'standardRemarkId' => $attempt->standardRemarkId,
-                    'standardRemarkContent' => $attempt->standardRemarkContent,
-                    'reschedulingEvidence' => $attempt->reschedulingEvidence,
+                    'phoneCollectionDetailId' => $attempt->phoneCollectionDetailId ?? null,
+                    'phoneCollectionId' => $attempt->phoneCollectionId ?? null,
+                    'contactType' => $attempt->contactType ?? null,
+                    'phoneId' => $attempt->phoneId ?? null,
+                    'contactDetailId' => $attempt->contactDetailId ?? null,
+                    'contactPhoneNumer' => $attempt->contactPhoneNumer ?? null,
+                    'contactName' => $attempt->contactName ?? null,
+                    'contactRelation' => $attempt->contactRelation ?? null,
+                    'callStatus' => $attempt->callStatus ?? null,
+                    'callResultId' => $attempt->callResultId ?? null,
+                    'reasonId' => $attempt->reasonId ?? null,
+                    'reasonName' => isset($attempt->reason) && $attempt->reason ? $attempt->reason->reasonName : null,
+                    'reasonRemark' => isset($attempt->reason) && $attempt->reason ? $attempt->reason->reasonRemark : null,
+                    'leaveMessage' => $attempt->leaveMessage ?? null,
+                    'remark' => $attempt->remark ?? null,
+                    'promisedPaymentDate' => $promisedPaymentDate,
+                    'askingPostponePayment' => $attempt->askingPostponePayment ?? null,
+                    'dtCallLater' => $dtCallLater,
+                    'dtCallStarted' => $dtCallStarted,
+                    'dtCallEnded' => $dtCallEnded,
+                    'updatePhoneRequest' => $attempt->updatePhoneRequest ?? null,
+                    'updatePhoneRemark' => $attempt->updatePhoneRemark ?? null,
+                    'standardRemarkId' => $attempt->standardRemarkId ?? null,
+                    'standardRemarkContent' => $attempt->standardRemarkContent ?? null,
+                    'reschedulingEvidence' => $attempt->reschedulingEvidence ?? null,
                     'uploadedImages' => $uploadedImages,
-                    'createdAt' => $attempt->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    'createdBy' => $createdByUser, // Changed: Now returns userFullName
+                    'createdAt' => $createdAt,
+                    'createdBy' => $createdByUser,
                     // Related data
-                    'standardRemark' => $attempt->standardRemark,
-                    'callResult' => $attempt->callResult,
+                    'standardRemark' => isset($attempt->standardRemark) ? $attempt->standardRemark : null,
+                    'callResult' => isset($attempt->callResult) ? $attempt->callResult : null,
                 ];
             });
+
+            // Calculate summary safely
+            $summary = [
+                'byContactType' => [],
+                'byCallStatus' => [],
+                'latestAttempt' => null,
+                'oldestAttempt' => null,
+            ];
+
+            if ($attempts->count() > 0) {
+                $summary['byContactType'] = $attempts->groupBy('contactType')->map->count()->toArray();
+                $summary['byCallStatus'] = $attempts->groupBy('callStatus')->map->count()->toArray();
+
+                $firstAttempt = $attempts->first();
+                if ($firstAttempt && isset($firstAttempt->createdAt)) {
+                    $summary['latestAttempt'] = is_object($firstAttempt->createdAt) && method_exists($firstAttempt->createdAt, 'utc')
+                        ? $firstAttempt->createdAt->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($firstAttempt->createdAt) ? \Carbon\Carbon::parse($firstAttempt->createdAt)->utc()->format('Y-m-d\TH:i:s\Z') : null);
+                }
+
+                $lastAttempt = $attempts->last();
+                if ($lastAttempt && isset($lastAttempt->createdAt)) {
+                    $summary['oldestAttempt'] = is_object($lastAttempt->createdAt) && method_exists($lastAttempt->createdAt, 'utc')
+                        ? $lastAttempt->createdAt->utc()->format('Y-m-d\TH:i:s\Z')
+                        : (is_string($lastAttempt->createdAt) ? \Carbon\Carbon::parse($lastAttempt->createdAt)->utc()->format('Y-m-d\TH:i:s\Z') : null);
+                }
+            }
 
             Log::info('Call attempts fetched successfully', [
                 'phone_collection_id' => $phoneCollectionId,
@@ -278,12 +411,7 @@ class TblCcPhoneCollectionDetailController extends Controller
                     ],
                     'attempts' => $transformedAttempts,
                     'totalAttempts' => $attempts->count(),
-                    'summary' => [
-                        'byContactType' => $attempts->groupBy('contactType')->map->count(),
-                        'byCallStatus' => $attempts->groupBy('callStatus')->map->count(),
-                        'latestAttempt' => $attempts->first()?->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
-                        'oldestAttempt' => $attempts->last()?->createdAt?->utc()->format('Y-m-d\TH:i:s\Z'),
-                    ]
+                    'summary' => $summary
                 ]
             ], 200);
 
