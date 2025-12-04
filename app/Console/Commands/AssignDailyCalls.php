@@ -192,18 +192,18 @@ class AssignDailyCalls extends Command
                 $this->newLine();
             }
 
-            DB::commit();
-
-            // ✅ NEW: Update isAssigned = true for duty rosters of assigned batches (except batch 1)
+            // ✅ Update isAssigned = true for duty rosters BEFORE commit (inside transaction)
             foreach ($allAssignments as $batchId => $assignments) {
-                if ($batchId != 1) {  // Skip batch 1
-                    DutyRoster::where('work_date', $assignmentDate)
+                if ($batchId != 1 && !empty($assignments)) {  // Skip batch 1, only if has assignments
+                    $updatedCount = DutyRoster::where('work_date', $assignmentDate)
                         ->where('batchId', $batchId)
                         ->update(['isAssigned' => true]);
 
-                    $this->info("  ✅ Marked duty roster for batch {$batchId} as assigned");
+                    $this->info("  ✅ Marked {$updatedCount} duty roster records for batch {$batchId} as assigned");
                 }
             }
+
+            DB::commit();
 
             // Step 4: Display results
             $this->displayBatchAssignmentResults($allAssignments);
