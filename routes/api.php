@@ -129,6 +129,9 @@ Route::prefix('cc-phone-collections')->group(function () {
     Route::post('/manual-assign', [TblCcPhoneCollectionController::class, 'manualAssign']);
 });
 
+// Get payment info by phoneCollectionId
+Route::get('/cc-phone-collections/{phoneCollectionId}/payment-info', [TblCcPhoneCollectionController::class, 'getPaymentInfo']);
+
 Route::prefix('cc-reasons')->group(function () {
     // Get all active reasons (no pagination, no filters)
     Route::get('/', [TblCcReasonController::class, 'index']);

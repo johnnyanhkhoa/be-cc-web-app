@@ -400,6 +400,73 @@ class TblCcPhoneCollectionController extends Controller
     }
 
     /**
+     * Get payment information for a phone collection
+     *
+     * @param int $phoneCollectionId
+     * @return JsonResponse
+     */
+    public function getPaymentInfo(int $phoneCollectionId): JsonResponse
+    {
+        try {
+            // Validate phoneCollectionId
+            if ($phoneCollectionId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid phone collection ID',
+                    'error' => 'Phone collection ID must be a positive integer'
+                ], 400);
+            }
+
+            Log::info('Fetching payment info for phone collection', [
+                'phone_collection_id' => $phoneCollectionId
+            ]);
+
+            // Find phone collection
+            $phoneCollection = TblCcPhoneCollection::find($phoneCollectionId);
+
+            if (!$phoneCollection) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Phone collection not found',
+                    'error' => 'The specified phone collection does not exist'
+                ], 404);
+            }
+
+            // Prepare response data
+            $paymentInfo = [
+                'phoneCollectionId' => $phoneCollection->phoneCollectionId,
+                'dueDate' => $phoneCollection->dueDate?->format('Y-m-d'),
+                'paymentNo' => $phoneCollection->paymentNo,
+                'daysOverdueGross' => $phoneCollection->daysOverdueGross,
+                'daysSinceLastPayment' => $phoneCollection->daysSinceLastPayment,
+            ];
+
+            Log::info('Payment info retrieved successfully', [
+                'phone_collection_id' => $phoneCollectionId
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment information retrieved successfully',
+                'data' => $paymentInfo
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error('Failed to fetch payment info', [
+                'phone_collection_id' => $phoneCollectionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve payment information',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
+
+    /**
      * Mark phone collection as completed
      *
      * @param Request $request
