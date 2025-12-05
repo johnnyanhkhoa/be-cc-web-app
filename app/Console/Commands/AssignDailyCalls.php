@@ -263,6 +263,23 @@ class AssignDailyCalls extends Command
                 'updatedBy' => $assignedBy,
             ]);
 
+            // Log assignment
+            DB::table('tbl_CcCallAssignmentLog')->insert([
+                'phoneCollectionId' => $call->phoneCollectionId,
+                'contractNo' => $call->contractNo,
+                'batchId' => $batchId,
+                'subBatchId' => $call->subBatchId,
+                'action' => 'auto_assign',
+                'assignedTo' => $currentAgent['authUserId'],
+                'assignedBy' => $assignedBy,
+                'previousAssignedTo' => null,
+                'assignmentDate' => $assignmentDate,
+                'assignedAt' => now(),
+                'reason' => 'Auto assignment via command',
+                'createdAt' => now(),
+                'createdBy' => $assignedBy
+            ]);
+
             $assignments[] = [
                 'phoneCollectionId' => $call->phoneCollectionId,
                 'contractNo' => $call->contractNo,

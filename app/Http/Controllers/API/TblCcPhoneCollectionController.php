@@ -668,6 +668,25 @@ class TblCcPhoneCollectionController extends Controller
             $updatedCount = TblCcPhoneCollection::whereIn('phoneCollectionId', $foundIds)
                 ->update($updateData);
 
+            // Log manual assignment
+            foreach ($phoneCollections as $pc) {
+                DB::table('tbl_CcCallAssignmentLog')->insert([
+                    'phoneCollectionId' => $pc->phoneCollectionId,
+                    'contractNo' => $pc->contractNo,
+                    'batchId' => $pc->batchId,
+                    'subBatchId' => $pc->subBatchId,
+                    'action' => $pc->assignedTo ? 'reassign' : 'manual_assign',
+                    'assignedTo' => $assignTo,
+                    'assignedBy' => $assignedBy,
+                    'previousAssignedTo' => $pc->assignedTo, // Old value before update
+                    'assignmentDate' => now()->toDateString(),
+                    'assignedAt' => now(),
+                    'reason' => 'Manual assignment via API',
+                    'createdAt' => now(),
+                    'createdBy' => $assignedBy
+                ]);
+            }
+
             // Get updated records for response
             $updatedPhoneCollections = TblCcPhoneCollection::whereIn('phoneCollectionId', $foundIds)->get();
 
