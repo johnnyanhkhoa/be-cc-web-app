@@ -37,7 +37,7 @@ class AssignDailyCalls extends Command
         ini_set('memory_limit', '512M');
 
         try {
-            $assignmentDate = $this->option('date') ?? Carbon::today()->toDateString();
+            $assignmentDate = $this->option('date') ?? Carbon::now('Asia/Yangon')->toDateString();
 
             $this->info("Starting daily call assignment for date: {$assignmentDate}");
             $this->info('='.str_repeat('=', 60));
