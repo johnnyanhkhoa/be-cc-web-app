@@ -203,6 +203,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             'Promised Payment Date',
             'Call Later Date',
             'No Of Asking Postpone Payment',
+            'Phone Collection ID'
         ];
     }
 
@@ -332,6 +333,7 @@ class PhoneCollectionExport implements FromCollection, WithHeadings, WithMapping
             $pc->latest_promisedPaymentDate ? \Carbon\Carbon::parse($pc->latest_promisedPaymentDate)->format('Y-m-d') : null,
             $pc->latest_dtCallLater ? \Carbon\Carbon::parse($pc->latest_dtCallLater)->timezone('Asia/Yangon')->format('Y-m-d H:i:s') : null,  // ← YANGON TIMEZONE
             $this->postponeCountByContract[$pc->contractId] ?? 0,
+            $pc->phoneCollectionId,
         ];
     }
 
