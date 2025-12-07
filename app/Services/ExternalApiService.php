@@ -116,16 +116,28 @@ class ExternalApiService
     /**
      * Fetch pre-due contracts
      */
-    public function fetchPreDueContracts(array $batchData): array
+    public function fetchPreDueContracts(array $batchData, ?array $dslpExclusion = null): array
     {
-        // Existing method - giữ nguyên
         try {
             $url = self::BASE_URL . '/pre-due/contracts';
 
             Log::info('Fetching pre-due contracts', [
                 'url' => $url,
-                'batch_data' => $batchData
+                'batch_data' => $batchData,
+                'dslp_exclusion' => $dslpExclusion
             ]);
+
+            // ← THÊM: Build request body
+            $requestBody = [
+                'batchType' => $batchData['type'],
+                'batchCode' => $batchData['code'],
+                'batchIntensity' => $batchData['intensity']
+            ];
+
+            // ← THÊM: Add dslpExclusion if provided
+            if ($dslpExclusion !== null) {
+                $requestBody['dslpExclusion'] = $dslpExclusion;
+            }
 
             $response = Http::timeout(60)
                 ->withHeaders([
@@ -133,11 +145,7 @@ class ExternalApiService
                     'Content-Type' => 'application/json',
                     'x-api-key' => self::API_KEY,
                 ])
-                ->post($url, [
-                    'batchType' => $batchData['type'],
-                    'batchCode' => $batchData['code'],
-                    'batchIntensity' => $batchData['intensity']
-                ]);
+                ->post($url, $requestBody);  // ← SỬA: Dùng $requestBody
 
             if ($response->successful()) {
                 $data = $response->json();

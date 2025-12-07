@@ -129,6 +129,25 @@ class PhoneCollectionSyncService
                 throw new Exception('No active batches with intensity found for pre-due segment');
             }
 
+            // Get DSLP batch (batch 2) for exclusion
+            $dslpBatch = TblCcBatch::active()
+                ->bySegmentType('past-due')
+                ->where('code', 'dslp')
+                ->whereNotNull('intensity')
+                ->first();
+
+            $dslpExclusion = null;
+            if ($dslpBatch && $dslpBatch->intensity) {
+                $dslpExclusion = $dslpBatch->intensity;  // {type: "dslp", value: [7,21,30]}
+
+                Log::info('DSLP exclusion loaded', [
+                    'batch_id' => $dslpBatch->batchId,
+                    'dslp_exclusion' => $dslpExclusion
+                ]);
+            } else {
+                Log::warning('DSLP batch not found or has no intensity - pre-due sync will continue without exclusion');
+            }
+
             $totalContracts = 0;
             $totalInserted = 0;
             $batchResults = [];
@@ -144,7 +163,7 @@ class PhoneCollectionSyncService
                     'type' => $batch->type,
                     'code' => $batch->code,
                     'intensity' => $batch->intensity
-                ]);
+                ], $dslpExclusion);
 
                 // Transform and insert data
                 $insertedCount = $this->insertPhoneCollections(
