@@ -21,3 +21,9 @@ Schedule::command('sync:phone-collections')
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/phone-collection-sync.log'));
+
+// Send daily phone collection report at 9:00 AM Myanmar time
+Schedule::command('report:send-daily-phone-collection')
+    ->dailyAt('02:30')  // 02:30 UTC = 09:00 Myanmar time
+    ->timezone('UTC')
+    ->appendOutputTo(storage_path('logs/daily-report.log'));
