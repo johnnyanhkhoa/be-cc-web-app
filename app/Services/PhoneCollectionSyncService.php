@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services;
+use Carbon\Carbon;
 
 use App\Models\TblCcBatch;
 use App\Models\TblCcPhoneCollection;
@@ -53,6 +54,7 @@ class PhoneCollectionSyncService
     protected function syncPastDueContracts(): array
     {
         try {
+            $startTime = now();
             // Get active batches for past-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('past-due')
@@ -91,6 +93,24 @@ class PhoneCollectionSyncService
                 $totalContracts += $batchContracts;
                 $totalInserted += $insertedCount;
 
+                // Log sync result for this batch
+                DB::table('tbl_CcPhoneCollectionSyncLog')->insert([
+                    'syncDate' => Carbon::today('Asia/Yangon')->toDateString(),
+                    'syncType' => 'past-due',
+                    'batchId' => $batch->batchId,
+                    'batchCode' => $batch->code,
+                    'batchName' => $batch->batchName,
+                    'totalContracts' => $batchContracts,
+                    'totalInserted' => $insertedCount,
+                    'totalExcluded' => $batchContracts - $insertedCount,
+                    'status' => 'success',
+                    'duration' => now()->diffInSeconds($startTime),
+                    'startedAt' => $startTime,
+                    'completedAt' => now(),
+                    'createdAt' => now(),
+                    'createdBy' => 1
+                ]);
+
                 $batchResults[] = [
                     'batch_id' => $batch->batchId,
                     'batch_code' => $batch->code,
@@ -119,6 +139,7 @@ class PhoneCollectionSyncService
     protected function syncPreDueContracts(): array
     {
         try {
+            $startTime = now();
             // Get active batches for pre-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('pre-due')
@@ -175,6 +196,24 @@ class PhoneCollectionSyncService
                 $batchContracts = $apiResponse['data']['total'] ?? 0;
                 $totalContracts += $batchContracts;
                 $totalInserted += $insertedCount;
+
+                // Log sync result for this batch
+                DB::table('tbl_CcPhoneCollectionSyncLog')->insert([
+                    'syncDate' => Carbon::today('Asia/Yangon')->toDateString(),
+                    'syncType' => 'pre-due',
+                    'batchId' => $batch->batchId,
+                    'batchCode' => $batch->code,
+                    'batchName' => $batch->batchName,
+                    'totalContracts' => $batchContracts,
+                    'totalInserted' => $insertedCount,
+                    'totalExcluded' => $batchContracts - $insertedCount,
+                    'status' => 'success',
+                    'duration' => now()->diffInSeconds($startTime),
+                    'startedAt' => $startTime,
+                    'completedAt' => now(),
+                    'createdAt' => now(),
+                    'createdBy' => 1
+                ]);
 
                 $batchResults[] = [
                     'batch_id' => $batch->batchId,
