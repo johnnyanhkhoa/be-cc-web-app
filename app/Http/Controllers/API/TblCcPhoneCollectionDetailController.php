@@ -511,7 +511,8 @@ class TblCcPhoneCollectionDetailController extends Controller
 
             // Step 2: Get case results for this batch
             $caseResults = TblCcCaseResult::active()
-                                        ->byBatch($batchId)  // ← SỬA: dùng batchId
+                                        ->byBatch($batchId)
+                                        ->where('caseResultActive', true)
                                         ->orderBy('caseResultName')
                                         ->get([
                                             'caseResultId',

@@ -19,6 +19,8 @@ use App\Http\Controllers\API\TblCcScriptController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\VoiceCallController;
 use App\Http\Controllers\API\TeamLevelConfigController;
+use App\Http\Controllers\TblCcCaseResultController;
+use App\Models\TblCcCaseResult;
 
 /*
 |--------------------------------------------------------------------------
@@ -349,6 +351,17 @@ Route::get('/cc-phone-collections/analytics-summary', [
 
 // Export Test Route
 Route::post('/export/test', [App\Http\Controllers\API\ExportController::class, 'testExport']);
+
+// Case Result Management APIs
+Route::prefix('case-results')->group(function () {
+    Route::get('/', [TblCcCaseResultController::class, 'index']);
+    Route::get('/{id}', [TblCcCaseResultController::class, 'show']);
+    Route::post('/', [TblCcCaseResultController::class, 'store']);
+    Route::put('/{id}', [TblCcCaseResultController::class, 'update']);
+    Route::delete('/{id}', [TblCcCaseResultController::class, 'destroy']);
+    Route::patch('/{id}/deactivate', [TblCcCaseResultController::class, 'deactivate']);
+    Route::patch('/{id}/activate', [TblCcCaseResultController::class, 'activate']);
+});
 
 // // Protected Routes (TODO: Add JWT middleware)
 // Route::middleware('auth:sanctum')->group(function () {

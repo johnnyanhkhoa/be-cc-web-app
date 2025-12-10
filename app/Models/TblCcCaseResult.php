@@ -19,16 +19,21 @@ class TblCcCaseResult extends Model
         'contactType',
         'batchId',
         'requiredField',
+        'caseResultActive',      // ← THÊM
         'createdBy',
         'updatedBy',
         'deletedBy',
+        'deactivatedAt',         // ← THÊM
+        'deactivatedBy',         // ← THÊM
     ];
 
     protected $casts = [
-        'requiredField' => 'array', // Cast JSON to array
+        'requiredField' => 'array',
+        'caseResultActive' => 'boolean',  // ← THÊM
         'createdAt' => 'datetime',
         'updatedAt' => 'datetime',
         'deletedAt' => 'datetime',
+        'deactivatedAt' => 'datetime',    // ← THÊM
     ];
 
     const CREATED_AT = 'createdAt';
@@ -62,6 +67,15 @@ class TblCcCaseResult extends Model
     public function scopeActive($query)
     {
         return $query->whereNull('deletedAt');
+    }
+
+    /**
+     * Scope for active AND enabled case results
+     */
+    public function scopeActiveAndEnabled($query)
+    {
+        return $query->whereNull('deletedAt')
+                     ->where('caseResultActive', true);
     }
 
     /**
