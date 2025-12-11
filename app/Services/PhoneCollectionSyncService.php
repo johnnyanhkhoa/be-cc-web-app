@@ -295,6 +295,35 @@ class PhoneCollectionSyncService
                 ]);
             }
 
+            // Get existing paymentIds already in DB today (to prevent duplicates)
+            $existingPaymentIds = DB::table('tbl_CcPhoneCollection')
+                ->whereNull('deletedAt')
+                ->whereRaw('DATE("createdAt" AT TIME ZONE \'Asia/Yangon\') = ?', [Carbon::today('Asia/Yangon')->toDateString()])
+                ->pluck('paymentId')
+                ->toArray();
+
+            if (!empty($existingPaymentIds)) {
+                Log::info('Filtering out duplicate payments already in DB today', [
+                    'segment_type' => $segmentType,
+                    'batch_id' => $batchId,
+                    'existing_count' => count($existingPaymentIds)
+                ]);
+
+                // Filter contracts array - exclude payments already in DB
+                $contracts = array_filter($contracts, function($contract) use ($existingPaymentIds) {
+                    return !in_array($contract['paymentId'] ?? null, $existingPaymentIds);
+                });
+
+                // Re-index array after filtering
+                $contracts = array_values($contracts);
+
+                Log::info('Contracts after duplicate filtering', [
+                    'segment_type' => $segmentType,
+                    'batch_id' => $batchId,
+                    'remaining_count' => count($contracts)
+                ]);
+            }
+
             $insertData = [];
             foreach ($contracts as $index => $contract) {
                 try {
