@@ -34,21 +34,29 @@ class TblCcCaseResultController extends Controller
                 $query->where('caseResultActive', $request->boolean('caseResultActive'));
             }
 
-            $caseResults = $query->orderBy('caseResultName')->get([
-                'caseResultId',
-                'caseResultName',
-                'caseResultRemark',
-                'contactType',
-                'batchId',
-                'requiredField',
-                'caseResultActive',
-                'createdAt',
-                'createdBy',
-                'updatedAt',
-                'updatedBy',
-                'deactivatedAt',
-                'deactivatedBy'
-            ]);
+            $caseResults = $query->with('batch:batchId,batchName')
+                ->orderBy('caseResultName')
+                ->get([
+                    'caseResultId',
+                    'caseResultName',
+                    'caseResultRemark',
+                    'contactType',
+                    'batchId',
+                    'requiredField',
+                    'caseResultActive',
+                    'createdAt',
+                    'createdBy',
+                    'updatedAt',
+                    'updatedBy',
+                    'deactivatedAt',
+                    'deactivatedBy'
+                ]);
+
+            // Append batchName to each result
+            $caseResults->each(function($result) {
+                $result->batchName = $result->batch->batchName ?? null;
+                unset($result->batch);
+            });
 
             return response()->json([
                 'success' => true,
@@ -76,13 +84,13 @@ class TblCcCaseResultController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $caseResult = TblCcCaseResult::whereNull('deletedAt')->find($id);
+            $caseResult = TblCcCaseResult::with('batch:batchId,batchName')
+                ->whereNull('deletedAt')
+                ->find($id);
 
-            if (!$caseResult) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Case result not found'
-                ], 404);
+            if ($caseResult) {
+                $caseResult->batchName = $caseResult->batch->batchName ?? null;
+                unset($caseResult->batch);
             }
 
             return response()->json([
