@@ -54,7 +54,6 @@ class PhoneCollectionSyncService
     protected function syncPastDueContracts(): array
     {
         try {
-            $startTime = now();
             // Get active batches for past-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('past-due')
@@ -70,6 +69,8 @@ class PhoneCollectionSyncService
             $batchResults = [];
 
             foreach ($batches as $batch) {
+                $batchStartTime = now();
+
                 Log::info('Processing past-due batch', [
                     'batch_id' => $batch->batchId,
                     'batch_code' => $batch->code
@@ -104,8 +105,8 @@ class PhoneCollectionSyncService
                     'totalInserted' => $insertedCount,
                     'totalExcluded' => $batchContracts - $insertedCount,
                     'status' => 'success',
-                    'duration' => now()->diffInSeconds($startTime),
-                    'startedAt' => $startTime,
+                    'duration' => max(0, (int) $batchStartTime->diffInSeconds(now())),  // ← SỬA: dùng $batchStartTime
+                    'startedAt' => $batchStartTime,                       // ← SỬA
                     'completedAt' => now(),
                     'createdAt' => now(),
                     'createdBy' => 1
@@ -139,7 +140,6 @@ class PhoneCollectionSyncService
     protected function syncPreDueContracts(): array
     {
         try {
-            $startTime = now();
             // Get active batches for pre-due with intensity NOT NULL
             $batches = TblCcBatch::active()
                 ->bySegmentType('pre-due')
@@ -174,6 +174,8 @@ class PhoneCollectionSyncService
             $batchResults = [];
 
             foreach ($batches as $batch) {
+                $batchStartTime = now();
+
                 Log::info('Processing pre-due batch', [
                     'batch_id' => $batch->batchId,
                     'batch_code' => $batch->code
@@ -208,8 +210,8 @@ class PhoneCollectionSyncService
                     'totalInserted' => $insertedCount,
                     'totalExcluded' => $batchContracts - $insertedCount,
                     'status' => 'success',
-                    'duration' => now()->diffInSeconds($startTime),
-                    'startedAt' => $startTime,
+                    'duration' => max(0, (int) $batchStartTime->diffInSeconds(now())),  // ← SỬA
+                    'startedAt' => $batchStartTime,
                     'completedAt' => now(),
                     'createdAt' => now(),
                     'createdBy' => 1
@@ -252,7 +254,7 @@ class PhoneCollectionSyncService
             $excludedFromNew = \App\Models\TblCcPromiseHistory::where('isActive', true)
                 ->where(function($query) {
                     $query->where('promisedPaymentDate', '>', now()->toDateString())
-                        ->orWhere('dtCallLater', '>', now());
+                        ->orWhere('dtCallLater', '>', now()->endOfDay());
                 })
                 ->pluck('paymentId')
                 ->toArray();
@@ -262,7 +264,7 @@ class PhoneCollectionSyncService
                 ->where('isActive', true)
                 ->where(function($query) {
                     $query->where('promisedPaymentDate', '>', now()->toDateString())
-                        ->orWhere('dtCallLater', '>', now());
+                        ->orWhere('dtCallLater', '>', now()->endOfDay());
                 })
                 ->pluck('paymentId')
                 ->toArray();
