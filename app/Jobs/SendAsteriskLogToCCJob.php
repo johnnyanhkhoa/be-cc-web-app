@@ -41,15 +41,21 @@ class SendAsteriskLogToCCJob implements ShouldQueue
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
-                // ✅ FIX: Lấy data từ property của Job object
+                // ✅ FIX: Access private property bằng Reflection
                 $asteriskData = null;
 
-                if (is_object($command) && property_exists($command, 'data')) {
-                    // Zay Yar dispatch với property $data
-                    $asteriskData = $command->data;
-                } elseif (isset($command->data) && is_array($command->data)) {
-                    // Fallback: nếu data là array trực tiếp
-                    $asteriskData = $command->data;
+                if (is_object($command)) {
+                    try {
+                        // Sử dụng Reflection để access private property
+                        $reflection = new \ReflectionClass($command);
+                        $property = $reflection->getProperty('data');
+                        $property->setAccessible(true);
+                        $asteriskData = $property->getValue($command);
+                    } catch (\ReflectionException $e) {
+                        Log::warning('Cannot access data property via reflection', [
+                            'error' => $e->getMessage()
+                        ]);
+                    }
                 }
 
                 if ($asteriskData && is_array($asteriskData)) {
@@ -64,8 +70,8 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                 } else {
                     Log::warning('Invalid asterisk data structure', [
                         'command_class' => get_class($command),
-                        'has_data_property' => property_exists($command, 'data'),
-                        'data_type' => gettype($command->data ?? null),
+                        'data_type' => gettype($asteriskData),
+                        'data_value' => $asteriskData,
                     ]);
                 }
             }
