@@ -18,14 +18,30 @@ class SendAsteriskLogToCCJob implements ShouldQueue
     public $timeout = 60;
     public $tries = 3;
 
-    public function __construct()
+    public $data;
+
+    public function __construct($data = null)
     {
+        $this->data = $data;
         $this->onQueue('asterisk_log');
     }
 
     public function handle(): void
     {
         try {
+            // ✅ ƯU TIÊN DÙNG $this->data TRƯỚC
+            if ($this->data && is_array($this->data)) {
+                Log::info('=== ASTERISK CALL LOG RECEIVED (from property) ===', [
+                    'api_call_id' => $this->data['api_call_id'] ?? null,
+                    'case_id' => $this->data['case_id'] ?? null,
+                    'asterisk_call_id' => $this->data['asterisk_call_id'] ?? null,
+                ]);
+
+                $this->saveToDatabase($this->data);
+                return;
+            }
+
+            // ✅ FALLBACK: Parse từ payload (nếu không có $this->data)
             if (!isset($this->job)) {
                 Log::warning('Job property not available');
                 return;
@@ -37,41 +53,19 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                 'payload' => $payload
             ]);
 
-            // Parse serialized command
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
-                // ✅ FIX: Access private property bằng Reflection
-                $asteriskData = null;
-
-                if (is_object($command)) {
-                    try {
-                        // Sử dụng Reflection để access private property
-                        $reflection = new \ReflectionClass($command);
-                        $property = $reflection->getProperty('data');
-                        $property->setAccessible(true);
-                        $asteriskData = $property->getValue($command);
-                    } catch (\ReflectionException $e) {
-                        Log::warning('Cannot access data property via reflection', [
-                            'error' => $e->getMessage()
-                        ]);
-                    }
-                }
-
-                if ($asteriskData && is_array($asteriskData)) {
-                    Log::info('=== ASTERISK CALL LOG RECEIVED ===', [
-                        'api_call_id' => $asteriskData['api_call_id'] ?? null,
-                        'case_id' => $asteriskData['case_id'] ?? null,
-                        'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
-                        'phone_to' => $asteriskData['phone_to'] ?? null,
+                if (is_object($command) && isset($command->data) && is_array($command->data)) {
+                    Log::info('=== ASTERISK CALL LOG RECEIVED (from payload) ===', [
+                        'api_call_id' => $command->data['api_call_id'] ?? null,
+                        'case_id' => $command->data['case_id'] ?? null,
                     ]);
 
-                    $this->saveToDatabase($asteriskData);
+                    $this->saveToDatabase($command->data);
                 } else {
                     Log::warning('Invalid asterisk data structure', [
-                        'command_class' => get_class($command),
-                        'data_type' => gettype($asteriskData),
-                        'data_value' => $asteriskData,
+                        'command_class' => is_object($command) ? get_class($command) : gettype($command),
                     ]);
                 }
             }
