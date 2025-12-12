@@ -41,15 +41,15 @@ class SendAsteriskLogToCCJob implements ShouldQueue
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
-                // ✅ Check if this is array data (direct dispatch) hoặc Model
+                // ✅ FIX: Lấy data từ property của Job object
                 $asteriskData = null;
 
-                if (isset($command->data) && is_array($command->data)) {
-                    // Trường hợp Zay Yar dispatch với array
+                if (is_object($command) && property_exists($command, 'data')) {
+                    // Zay Yar dispatch với property $data
                     $asteriskData = $command->data;
-                } elseif (is_object($command) && isset($command->callData)) {
-                    // Trường hợp dispatch với Model (nếu có)
-                    $asteriskData = $command->callData;
+                } elseif (isset($command->data) && is_array($command->data)) {
+                    // Fallback: nếu data là array trực tiếp
+                    $asteriskData = $command->data;
                 }
 
                 if ($asteriskData && is_array($asteriskData)) {
@@ -57,13 +57,15 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                         'api_call_id' => $asteriskData['api_call_id'] ?? null,
                         'case_id' => $asteriskData['case_id'] ?? null,
                         'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
+                        'phone_to' => $asteriskData['phone_to'] ?? null,
                     ]);
 
                     $this->saveToDatabase($asteriskData);
                 } else {
                     Log::warning('Invalid asterisk data structure', [
-                        'command_type' => get_class($command),
-                        'command' => $command
+                        'command_class' => get_class($command),
+                        'has_data_property' => property_exists($command, 'data'),
+                        'data_type' => gettype($command->data ?? null),
                     ]);
                 }
             }
