@@ -33,21 +33,38 @@ class SendAsteriskLogToCCJob implements ShouldQueue
 
             $payload = $this->job->payload();
 
+            Log::info('=== RAW PAYLOAD RECEIVED ===', [
+                'payload' => $payload
+            ]);
+
             // Parse serialized command
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
-                if (isset($command->data) && is_array($command->data)) {
-                    $asteriskData = $command->data;
+                // ✅ Check if this is array data (direct dispatch) hoặc Model
+                $asteriskData = null;
 
+                if (isset($command->data) && is_array($command->data)) {
+                    // Trường hợp Zay Yar dispatch với array
+                    $asteriskData = $command->data;
+                } elseif (is_object($command) && isset($command->callData)) {
+                    // Trường hợp dispatch với Model (nếu có)
+                    $asteriskData = $command->callData;
+                }
+
+                if ($asteriskData && is_array($asteriskData)) {
                     Log::info('=== ASTERISK CALL LOG RECEIVED ===', [
                         'api_call_id' => $asteriskData['api_call_id'] ?? null,
                         'case_id' => $asteriskData['case_id'] ?? null,
                         'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
                     ]);
 
-                    // Save to database
                     $this->saveToDatabase($asteriskData);
+                } else {
+                    Log::warning('Invalid asterisk data structure', [
+                        'command_type' => get_class($command),
+                        'command' => $command
+                    ]);
                 }
             }
         } catch (\Exception $e) {
