@@ -96,25 +96,37 @@ class SendAsteriskLogToCCJob implements ShouldQueue
             // Parse dates
             $calledAt = null;
             if (isset($data['called_at'])) {
-                if ($data['called_at'] instanceof Carbon) {
-                    $calledAt = $data['called_at'];
-                } else {
-                    $calledAt = Carbon::parse($data['called_at']);
-                }
+                $calledAt = $data['called_at'] instanceof Carbon
+                    ? $data['called_at']
+                    : Carbon::parse($data['called_at']);
             }
 
             $callDate = isset($data['call_date']) ? Carbon::parse($data['call_date']) : null;
 
-            // ✅ TÌM record đã tạo khi INITIATE (match bằng caseId + phoneNo + createdAt gần nhất)
+            // ✅ Parse raw_content nếu là array hoặc JSON string
+            $rawContent = $data['raw_content'] ?? null;
+            $parsedRaw = null;
+
+            if (is_array($rawContent)) {
+                $parsedRaw = $rawContent;
+            } elseif (is_string($rawContent)) {
+                $parsedRaw = json_decode($rawContent, true);
+            }
+
+            // ✅ Ưu tiên lấy từ raw_content (clean data)
+            $asteriskCallId = $parsedRaw['callid'] ?? ($data['asterisk_call_id'] ?? null);
+            $recordFile = $parsedRaw['recordfile'] ?? ($data['record_file'] ?? null);
+
+            // TÌM record đã tạo khi INITIATE
             $existingLog = DB::table('tbl_CcAsteriskCallLog')
                 ->where('caseId', $data['case_id'])
                 ->where('phoneNo', $data['phone_to'])
-                ->whereNull('apiCallId') // Chỉ lấy record chưa có apiCallId
+                ->whereNull('apiCallId')
                 ->orderBy('createdAt', 'desc')
                 ->first();
 
             if ($existingLog) {
-                // ✅ UPDATE record đã có
+                // UPDATE record đã có
                 DB::table('tbl_CcAsteriskCallLog')
                     ->where('id', $existingLog->id)
                     ->update([
@@ -124,21 +136,21 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                         'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
                         'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
                         'callStatus' => $data['status'] ?? null,
-                        'recordFile' => $data['record_file'] ?? null,
-                        'asteriskCallId' => $data['asterisk_call_id'] ?? null,
-                        'rawContent' => $data['raw_content'] ?? null,
+                        'recordFile' => $recordFile, // ✅ Từ raw_content
+                        'asteriskCallId' => $asteriskCallId, // ✅ Từ raw_content
+                        'rawContent' => is_string($rawContent) ? $rawContent : json_encode($rawContent),
                         'company' => $data['company'] ?? null,
-                        'outboundCnum' => $data['outbound_cnum'] ?? null,
+                        'outboundCnum' => $parsedRaw['outbound_cnum'] ?? ($data['outbound_cnum'] ?? null),
                         'updatedAt' => now(),
                     ]);
 
                 Log::info('Asterisk call log UPDATED successfully', [
                     'id' => $existingLog->id,
                     'case_id' => $data['case_id'],
-                    'asterisk_call_id' => $data['asterisk_call_id'],
+                    'asterisk_call_id' => $asteriskCallId,
                 ]);
             } else {
-                // ✅ INSERT nếu không tìm thấy (fallback - trường hợp không initiate trước)
+                // INSERT fallback
                 DB::table('tbl_CcAsteriskCallLog')->insert([
                     'caseId' => $data['case_id'] ?? null,
                     'phoneNo' => $data['phone_to'] ?? null,
@@ -150,18 +162,18 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                     'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
                     'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
                     'callStatus' => $data['status'] ?? null,
-                    'recordFile' => $data['record_file'] ?? null,
-                    'asteriskCallId' => $data['asterisk_call_id'] ?? null,
-                    'rawContent' => $data['raw_content'] ?? null,
+                    'recordFile' => $recordFile, // ✅ Từ raw_content
+                    'asteriskCallId' => $asteriskCallId, // ✅ Từ raw_content
+                    'rawContent' => is_string($rawContent) ? $rawContent : json_encode($rawContent),
                     'company' => $data['company'] ?? null,
-                    'outboundCnum' => $data['outbound_cnum'] ?? null,
+                    'outboundCnum' => $parsedRaw['outbound_cnum'] ?? ($data['outbound_cnum'] ?? null),
                     'createdAt' => now(),
                     'updatedAt' => now(),
                 ]);
 
-                Log::info('Asterisk call log INSERTED (no initiate record found)', [
+                Log::info('Asterisk call log INSERTED', [
                     'case_id' => $data['case_id'],
-                    'asterisk_call_id' => $data['asterisk_call_id'],
+                    'asterisk_call_id' => $asteriskCallId,
                 ]);
             }
 
