@@ -13,7 +13,7 @@ use Carbon\Carbon;
 
 class SendAsteriskLogToCCJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
     public $timeout = 60;
     public $tries = 3;
