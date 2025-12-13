@@ -61,7 +61,14 @@ class PhoneCollectionSyncService
                 ->get();
 
             if ($batches->isEmpty()) {
-                throw new Exception('No active batches with intensity found for past-due segment');
+                Log::info('No active batches found for past-due segment - skipping');
+                return [
+                    'success' => true,
+                    'batches_processed' => 0,
+                    'batch_results' => [],
+                    'total_contracts' => 0,
+                    'total_inserted' => 0
+                ];
             }
 
             $totalContracts = 0;
@@ -147,7 +154,14 @@ class PhoneCollectionSyncService
                 ->get();
 
             if ($batches->isEmpty()) {
-                throw new Exception('No active batches with intensity found for pre-due segment');
+                Log::info('No active batches found for pre-due segment - skipping');
+                return [
+                    'success' => true,
+                    'batches_processed' => 0,
+                    'batch_results' => [],
+                    'total_contracts' => 0,
+                    'total_inserted' => 0
+                ];
             }
 
             // Get DSLP batch (batch 2) for exclusion
