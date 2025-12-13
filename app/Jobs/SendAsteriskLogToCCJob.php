@@ -37,58 +37,43 @@ class SendAsteriskLogToCCJob implements ShouldQueue
             $payload = $this->job->payload();
 
             Log::info('=== RAW PAYLOAD RECEIVED ===', [
-                'has_command' => isset($payload['data']['command'])
+                'payload' => $payload
             ]);
 
+            // ✅ NEW: Zay Yar gửi raw JSON
+            if (isset($payload['data']) && is_array($payload['data'])) {
+                $asteriskData = $payload['data'];
+
+                Log::info('=== ASTERISK CALL LOG RECEIVED (RAW JSON) ===', [
+                    'api_call_id' => $asteriskData['api_call_id'] ?? null,
+                    'case_id' => $asteriskData['case_id'] ?? null,
+                    'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
+                ]);
+
+                $this->saveToDatabase($asteriskData);
+                return;
+            }
+
+            // ✅ FALLBACK: Old serialized format (for old messages in queue)
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
-                Log::info('=== COMMAND UNSERIALIZED ===', [
-                    'command_class' => get_class($command),
-                    'command_type' => gettype($command),
-                ]);
-
-                // ✅ FIX: Truy cập property qua object notation
-                $asteriskData = null;
-
                 if (is_object($command)) {
-                    // Lấy tất cả properties của object (including private)
                     $reflection = new \ReflectionObject($command);
                     $properties = $reflection->getProperties();
 
                     foreach ($properties as $property) {
                         $property->setAccessible(true);
-                        $propName = $property->getName();
-                        $propValue = $property->getValue($command);
-
-                        Log::info('=== PROPERTY FOUND ===', [
-                            'name' => $propName,
-                            'type' => gettype($propValue),
-                            'is_array' => is_array($propValue),
-                        ]);
-
-                        if ($propName === 'data' && is_array($propValue)) {
-                            $asteriskData = $propValue;
-                            break;
+                        if ($property->getName() === 'data' && is_array($property->getValue($command))) {
+                            $this->saveToDatabase($property->getValue($command));
+                            return;
                         }
                     }
                 }
-
-                if ($asteriskData && is_array($asteriskData)) {
-                    Log::info('=== ASTERISK CALL LOG RECEIVED ===', [
-                        'api_call_id' => $asteriskData['api_call_id'] ?? null,
-                        'case_id' => $asteriskData['case_id'] ?? null,
-                        'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
-                    ]);
-
-                    $this->saveToDatabase($asteriskData);
-                } else {
-                    Log::error('Cannot extract asterisk data', [
-                        'asteriskData_type' => gettype($asteriskData),
-                        'asteriskData_value' => $asteriskData,
-                    ]);
-                }
             }
+
+            Log::warning('Cannot extract asterisk data from payload');
+
         } catch (\Exception $e) {
             Log::error('Failed to process Asterisk log', [
                 'error' => $e->getMessage(),
