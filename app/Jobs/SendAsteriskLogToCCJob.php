@@ -37,24 +37,10 @@ class SendAsteriskLogToCCJob implements ShouldQueue
             $payload = $this->job->payload();
 
             Log::info('=== RAW PAYLOAD RECEIVED ===', [
-                'payload' => $payload
+                'has_command' => isset($payload['data']['command'])
             ]);
 
-            // ✅ NEW: Zay Yar gửi raw JSON
-            if (isset($payload['data']) && is_array($payload['data'])) {
-                $asteriskData = $payload['data'];
-
-                Log::info('=== ASTERISK CALL LOG RECEIVED (RAW JSON) ===', [
-                    'api_call_id' => $asteriskData['api_call_id'] ?? null,
-                    'case_id' => $asteriskData['case_id'] ?? null,
-                    'asterisk_call_id' => $asteriskData['asterisk_call_id'] ?? null,
-                ]);
-
-                $this->saveToDatabase($asteriskData);
-                return;
-            }
-
-            // ✅ FALLBACK: Old serialized format (for old messages in queue)
+            // ✅ ƯU TIÊN: Parse serialized format TRƯỚC
             if (isset($payload['data']['command'])) {
                 $command = unserialize($payload['data']['command']);
 
@@ -64,12 +50,32 @@ class SendAsteriskLogToCCJob implements ShouldQueue
 
                     foreach ($properties as $property) {
                         $property->setAccessible(true);
-                        if ($property->getName() === 'data' && is_array($property->getValue($command))) {
-                            $this->saveToDatabase($property->getValue($command));
+                        $propName = $property->getName();
+                        $propValue = $property->getValue($command);
+
+                        if ($propName === 'data' && is_array($propValue)) {
+                            Log::info('=== ASTERISK CALL LOG RECEIVED (SERIALIZED) ===', [
+                                'api_call_id' => $propValue['api_call_id'] ?? null,
+                                'case_id' => $propValue['case_id'] ?? null,
+                                'asterisk_call_id' => $propValue['asterisk_call_id'] ?? null,
+                            ]);
+
+                            $this->saveToDatabase($propValue);
                             return;
                         }
                     }
                 }
+            }
+
+            // ✅ FALLBACK: Raw JSON (nếu Zay Yar gửi kiểu mới)
+            if (isset($payload['data']) && is_array($payload['data']) && !isset($payload['data']['command'])) {
+                Log::info('=== ASTERISK CALL LOG RECEIVED (RAW JSON) ===', [
+                    'api_call_id' => $payload['data']['api_call_id'] ?? null,
+                    'case_id' => $payload['data']['case_id'] ?? null,
+                ]);
+
+                $this->saveToDatabase($payload['data']);
+                return;
             }
 
             Log::warning('Cannot extract asterisk data from payload');
