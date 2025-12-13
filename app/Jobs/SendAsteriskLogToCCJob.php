@@ -103,7 +103,7 @@ class SendAsteriskLogToCCJob implements ShouldQueue
 
             $callDate = isset($data['call_date']) ? Carbon::parse($data['call_date']) : null;
 
-            // ✅ Parse raw_content nếu là array hoặc JSON string
+            // ✅ THÊM ĐOẠN NÀY - Parse raw_content và clean data
             $rawContent = $data['raw_content'] ?? null;
             $parsedRaw = null;
 
@@ -113,9 +113,24 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                 $parsedRaw = json_decode($rawContent, true);
             }
 
-            // ✅ Ưu tiên lấy từ raw_content (clean data)
+            // ✅ Clean recordFile - extract phần .wav
+            $recordFile = null;
+            $rawRecordFile = $parsedRaw['recordfile'] ?? ($data['record_file'] ?? null);
+
+            if ($rawRecordFile) {
+                // Extract phần trước ".wav" + ".wav"
+                if (preg_match('/^(.+?\.wav)/', $rawRecordFile, $matches)) {
+                    $recordFile = $matches[1];
+                } else {
+                    $recordFile = $rawRecordFile;
+                }
+            }
+
+            // ✅ asteriskCallId từ raw_content
             $asteriskCallId = $parsedRaw['callid'] ?? ($data['asterisk_call_id'] ?? null);
-            $recordFile = $parsedRaw['recordfile'] ?? ($data['record_file'] ?? null);
+
+            // ✅ outboundCnum từ raw_content
+            $outboundCnum = $parsedRaw['outbound_cnum'] ?? ($data['outbound_cnum'] ?? null);
 
             // TÌM record đã tạo khi INITIATE
             $existingLog = DB::table('tbl_CcAsteriskCallLog')
@@ -136,11 +151,11 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                         'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
                         'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
                         'callStatus' => $data['status'] ?? null,
-                        'recordFile' => $recordFile, // ✅ Từ raw_content
+                        'recordFile' => $recordFile, // ✅ Đã clean
                         'asteriskCallId' => $asteriskCallId, // ✅ Từ raw_content
                         'rawContent' => is_string($rawContent) ? $rawContent : json_encode($rawContent),
                         'company' => $data['company'] ?? null,
-                        'outboundCnum' => $parsedRaw['outbound_cnum'] ?? ($data['outbound_cnum'] ?? null),
+                        'outboundCnum' => $outboundCnum, // ✅ Từ raw_content
                         'updatedAt' => now(),
                     ]);
 
@@ -148,6 +163,7 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                     'id' => $existingLog->id,
                     'case_id' => $data['case_id'],
                     'asterisk_call_id' => $asteriskCallId,
+                    'record_file' => $recordFile,
                 ]);
             } else {
                 // INSERT fallback
@@ -162,11 +178,11 @@ class SendAsteriskLogToCCJob implements ShouldQueue
                     'handleTimeSec' => isset($data['handle_time_sec']) ? (int)$data['handle_time_sec'] : null,
                     'talkTimeSec' => isset($data['talk_time_sec']) ? (int)$data['talk_time_sec'] : null,
                     'callStatus' => $data['status'] ?? null,
-                    'recordFile' => $recordFile, // ✅ Từ raw_content
+                    'recordFile' => $recordFile, // ✅ Đã clean
                     'asteriskCallId' => $asteriskCallId, // ✅ Từ raw_content
                     'rawContent' => is_string($rawContent) ? $rawContent : json_encode($rawContent),
                     'company' => $data['company'] ?? null,
-                    'outboundCnum' => $parsedRaw['outbound_cnum'] ?? ($data['outbound_cnum'] ?? null),
+                    'outboundCnum' => $outboundCnum, // ✅ Từ raw_content
                     'createdAt' => now(),
                     'updatedAt' => now(),
                 ]);
